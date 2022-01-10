@@ -1,0 +1,3 @@
+# Readme
+
+* Need to be logged in to GCloud: `gcloud auth application-default login`

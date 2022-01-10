@@ -7,24 +7,8 @@ service cloud.firestore {
     }
 
     match /words/{docId} {
-      // allow read
-      allow create: if request.auth != null
-        && request.resource.data.keys().hasOnly([
-          'user_uid',
-          'dictionary_form',
-          'reading'
-        ])
-        && request.resource.data.user_uid == request.auth.uid
-        && request.resource.data.dictionary_form is string
-        && request.resource.data.reading is string;
+      allow read: if request.auth != null
+        && resource.data.userUid == request.auth.uid;
     }
   }
-  // id SERIAL PRIMARY KEY,
-  // user_id INT NOT NULL,
-  // dictionary_form VARCHAR (128) NOT NULL,
-  // reading varchar (128) NOT NULL,
-  // frequency INT NOT NULL DEFAULT 1,
-  // is_mined BOOLEAN NOT NULL DEFAULT FALSE,
-  // created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  // updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 }
