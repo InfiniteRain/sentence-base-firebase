@@ -152,5 +152,11 @@ describe("Function tests", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
     expect(wordSnapData?.updatedAt > wordSnapData?.createdAt).toBeTruthy();
+
+    const existingWordRef = await firestore
+      .collection("words")
+      .where("userUid", "==", authContext.auth.uid)
+      .get();
+    expect(existingWordRef.docs.length).toEqual(1);
   });
 });

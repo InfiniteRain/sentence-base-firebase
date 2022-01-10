@@ -71,9 +71,6 @@ export const addSentence = functions.https.onCall(async (data, context) => {
 
   if (wordExists) {
     const snap = existingWordRef.docs[0];
-
-    console.log("incrementing...");
-
     snap.ref.set(
       {
         frequency: snap.data().frequency + 1,
