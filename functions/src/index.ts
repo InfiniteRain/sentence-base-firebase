@@ -1,6 +1,7 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { object, string } from "joi";
+import { config } from "./config";
 
 admin.initializeApp();
 
@@ -27,6 +28,14 @@ admin.initializeApp();
 //       { merge: true }
 //     );
 //   });
+export const createUserDocument = functions.auth.user().onCreate((user) => {
+  const firestore = admin.firestore();
+  const usersCollection = firestore.collection("users");
+
+  usersCollection.doc(user.uid).set({
+    pendingSentences: 0,
+  });
+});
 
 export const addSentence = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -48,8 +57,19 @@ export const addSentence = functions.https.onCall(async (data, context) => {
   const { dictionaryForm, reading, sentence } = data;
   const firestore = admin.firestore();
   const wordsCollection = firestore.collection("words");
-  const serverTimestamp = admin.firestore.FieldValue.serverTimestamp();
+  const sentencesCollection = firestore.collection("sentences");
+  const usersCollection = firestore.collection("users");
 
+  const userSnap = await usersCollection.doc(context.auth.uid).get();
+
+  if (userSnap.data()?.pendingSentences >= config.maximumPendingSentences) {
+    throw new functions.https.HttpsError(
+      "resource-exhausted",
+      "pending sentences limit reached"
+    );
+  }
+
+  const serverTimestamp = admin.firestore.FieldValue.serverTimestamp();
   const existingWordRef = await wordsCollection
     .where("userUid", "==", context.auth.uid)
     .where("dictionaryForm", "==", dictionaryForm)
@@ -59,7 +79,7 @@ export const addSentence = functions.https.onCall(async (data, context) => {
 
   const wordRef = wordExists
     ? existingWordRef.docs[0]
-    : await firestore.collection("words").add({
+    : await wordsCollection.add({
         userUid: context.auth.uid,
         dictionaryForm,
         reading,
@@ -71,18 +91,13 @@ export const addSentence = functions.https.onCall(async (data, context) => {
 
   if (wordExists) {
     const snap = existingWordRef.docs[0];
-    snap.ref.set(
-      {
-        frequency: snap.data().frequency + 1,
-        updatedAt: serverTimestamp,
-      },
-      {
-        merge: true,
-      }
-    );
+    snap.ref.update({
+      frequency: admin.firestore.FieldValue.increment(1),
+      updatedAt: serverTimestamp,
+    });
   }
 
-  const sentenceRef = await firestore.collection("sentences").add({
+  const sentenceRef = await sentencesCollection.add({
     userUid: context.auth.uid,
     wordId: wordRef.id,
     sentence,
@@ -90,6 +105,10 @@ export const addSentence = functions.https.onCall(async (data, context) => {
     isMined: false,
     createdAt: serverTimestamp,
     updatedAt: serverTimestamp,
+  });
+
+  await userSnap.ref.update({
+    pendingSentences: admin.firestore.FieldValue.increment(1),
   });
 
   return sentenceRef.id;
