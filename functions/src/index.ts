@@ -1,6 +1,6 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-import { object, string } from "joi";
+import { object, string, array } from "joi";
 import { config } from "./config";
 
 admin.initializeApp();
@@ -28,14 +28,16 @@ admin.initializeApp();
 //       { merge: true }
 //     );
 //   });
-export const createUserDocument = functions.auth.user().onCreate((user) => {
-  const firestore = admin.firestore();
-  const usersCollection = firestore.collection("users");
+export const createUserDocument = functions.auth
+  .user()
+  .onCreate(async (user) => {
+    const firestore = admin.firestore();
+    const usersCollection = firestore.collection("users");
 
-  usersCollection.doc(user.uid).set({
-    pendingSentences: 0,
+    await usersCollection.doc(user.uid).set({
+      pendingSentences: 0,
+    });
   });
-});
 
 export const addSentence = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -93,6 +95,7 @@ export const addSentence = functions.https.onCall(async (data, context) => {
     const snap = existingWordRef.docs[0];
     snap.ref.update({
       frequency: admin.firestore.FieldValue.increment(1),
+      isMined: false,
       updatedAt: serverTimestamp,
     });
   }
@@ -110,6 +113,107 @@ export const addSentence = functions.https.onCall(async (data, context) => {
   await userSnap.ref.update({
     pendingSentences: admin.firestore.FieldValue.increment(1),
   });
+
+  return sentenceRef.id;
+});
+
+export const newBatch = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "not logged in");
+  }
+
+  const schema = object({
+    sentenceIds: array().items(string()).min(1).required(),
+  });
+
+  const { error } = schema.validate(data);
+
+  if (error) {
+    throw new functions.https.HttpsError("invalid-argument", error.message);
+  }
+
+  const sentenceIds = new Set<string>(data.sentenceIds);
+  const mutatedSentenceIds = new Set<string>();
+  const firestore = admin.firestore();
+  const sentencesCollection = firestore.collection("sentences");
+  const wordsCollection = firestore.collection("words");
+  const batchesCollection = firestore.collection("batches");
+  const sentences = [];
+  const serverTimestamp = admin.firestore.FieldValue.serverTimestamp();
+  const updateBatch = firestore.batch();
+  const pendingSentenceSnapshot = await sentencesCollection
+    .where("userUid", "==", context.auth.uid)
+    .where("isPending", "==", true)
+    .get();
+
+  for (const sentenceDocumentSnap of pendingSentenceSnapshot.docs) {
+    if (!sentenceIds.has(sentenceDocumentSnap.id)) {
+      updateBatch.update(sentenceDocumentSnap.ref, {
+        isPending: false,
+        updatedAt: serverTimestamp,
+      });
+
+      continue;
+    }
+
+    mutatedSentenceIds.add(sentenceDocumentSnap.id);
+
+    const wordSnapshot = await wordsCollection
+      .where(
+        admin.firestore.FieldPath.documentId(),
+        "==",
+        sentenceDocumentSnap.data().wordId
+      )
+      .where("userUid", "==", context.auth.uid)
+      .limit(1)
+      .get();
+
+    if (wordSnapshot.empty) {
+      throw new functions.https.HttpsError(
+        "unknown",
+        "referenced word doesn't exist"
+      );
+    }
+
+    const wordDocumentSnap = wordSnapshot.docs[0];
+    const wordData = wordDocumentSnap.data();
+
+    sentences.push({
+      sentenceId: sentenceDocumentSnap.id,
+      sentence: sentenceDocumentSnap.data().sentence,
+      wordDictionaryForm: wordData.dictionaryForm,
+      wordReading: wordData.reading,
+    });
+
+    updateBatch.update(sentenceDocumentSnap.ref, {
+      isPending: false,
+      isMined: true,
+      updatedAt: serverTimestamp,
+    });
+    updateBatch.update(wordDocumentSnap.ref, {
+      isMined: true,
+      updatedAt: serverTimestamp,
+    });
+  }
+
+  const setsEquivalent =
+    sentenceIds.size === mutatedSentenceIds.size &&
+    [...sentenceIds].every((value) => mutatedSentenceIds.has(value));
+
+  if (!setsEquivalent) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "invalid sentence ids provided"
+    );
+  }
+
+  const sentenceRef = await batchesCollection.add({
+    sentences,
+    createdAt: serverTimestamp,
+    updatedAt: serverTimestamp,
+  });
+
+  await updateBatch.commit();
 
   return sentenceRef.id;
 });

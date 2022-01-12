@@ -2,6 +2,12 @@ import * as FirebaseFirestore from "@google-cloud/firestore";
 import { FeaturesList } from "firebase-functions-test/lib/features";
 import { createUserDocument } from "../src";
 
+export type AuthContext = {
+  auth: {
+    uid: string;
+  };
+};
+
 export const projectId = "sentence-base";
 export const testUserId = "testUser";
 export const timestampMatcher = {
@@ -12,7 +18,7 @@ export const timestampMatcher = {
 export const cleanFirestore = async (
   firestore: FirebaseFirestore.Firestore
 ) => {
-  for (const collection of ["words", "sentences", "users"]) {
+  for (const collection of ["words", "sentences", "users", "batches"]) {
     const snap = await firestore.collection(collection).get();
     const deleteBatch = firestore.batch();
 
@@ -27,7 +33,9 @@ export const cleanFirestore = async (
 
 let idIncrement = 0;
 
-export const initAuth = async (functionsTest: FeaturesList) => {
+export const initAuth = async (
+  functionsTest: FeaturesList
+): Promise<AuthContext> => {
   const uid = `testUser-${idIncrement++}`;
   const wrappedCreateUserDocument = functionsTest.wrap(createUserDocument);
   const user = functionsTest.auth.makeUserRecord({ uid });
