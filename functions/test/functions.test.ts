@@ -16,7 +16,7 @@ import {
   AuthContext,
 } from "./helpers";
 import firebaseFunctionsTest from "firebase-functions-test";
-import { addSentence, newBatch } from "../src";
+import { addSentence, deleteSentence, newBatch } from "../src";
 import * as admin from "firebase-admin";
 
 const functionsTest = firebaseFunctionsTest({
@@ -45,14 +45,16 @@ describe("Function tests", () => {
 
   const wrappedAddSentence = functionsTest.wrap(addSentence);
   const wrappedNewBatch = functionsTest.wrap(newBatch);
+  const wrappedDeleteSentence = functionsTest.wrap(deleteSentence);
+
+  const getDocumentFromId = async (collection: string, id: string) =>
+    await firestore.collection(collection).doc(id).get();
 
   const getDocumentDataFromId = async (
     collection: string,
     id: string
-  ): Promise<FirebaseFirestore.DocumentData | undefined> => {
-    const snap = await firestore.collection(collection).doc(id).get();
-    return snap.data();
-  };
+  ): Promise<FirebaseFirestore.DocumentData | undefined> =>
+    (await getDocumentFromId(collection, id)).data();
 
   const getDocumentCount = async (collection: string): Promise<number> => {
     const snap = await firestore.collection(collection).get();
@@ -116,6 +118,10 @@ describe("Function tests", () => {
 
     test("newBatch should reject", async () => {
       expect(wrappedNewBatch({})).rejects.toThrow("not logged in");
+    });
+
+    test("deleteSentence should reject", async () => {
+      expect(wrappedDeleteSentence({})).rejects.toThrow("not logged in");
     });
   });
 
@@ -340,14 +346,7 @@ describe("Function tests", () => {
 
     test("newBatch should not work with non-owned sentences", async () => {
       const authContext2 = await initAuth(functionsTest);
-      const sentenceId = await wrappedAddSentence(
-        {
-          dictionaryForm: "猫",
-          reading: "ネコ",
-          sentence: "これは猫です。",
-        },
-        authContext2
-      );
+      const sentenceId = (await mineWords(authContext2, [["猫", "ネコ"]]))[0];
 
       await expect(
         wrappedNewBatch(
@@ -360,14 +359,7 @@ describe("Function tests", () => {
     });
 
     test("newBatch should not work with non-pending sentences", async () => {
-      const sentenceId = await wrappedAddSentence(
-        {
-          dictionaryForm: "猫",
-          reading: "ネコ",
-          sentence: "これは猫です。",
-        },
-        authContext
-      );
+      const sentenceId = (await mineWords(authContext, [["猫", "ネコ"]]))[0];
 
       await firestore.collection("sentences").doc(sentenceId).update({
         isPending: false,
@@ -460,12 +452,126 @@ describe("Function tests", () => {
         wrappedNewBatch({ sentenceIds }, authContext)
       ).rejects.toThrow("invalid sentence ids provided");
     });
+
+    test("newBatch should reset the user's pendingSentences counter", async () => {
+      const oldUserData = await getDocumentDataFromId(
+        "users",
+        authContext.auth.uid
+      );
+      expect(oldUserData?.pendingSentences).toEqual(0);
+
+      const sentenceIds = await mineTestWords(authContext);
+
+      const newUserData = await getDocumentDataFromId(
+        "users",
+        authContext.auth.uid
+      );
+      expect(newUserData?.pendingSentences).toEqual(10);
+
+      await wrappedNewBatch({ sentenceIds }, authContext);
+
+      const newestUserData = await getDocumentDataFromId(
+        "users",
+        authContext.auth.uid
+      );
+      expect(newestUserData?.pendingSentences).toEqual(0);
+    });
+
+    test("deleteSentence should validate", async () => {
+      await expect(wrappedDeleteSentence({}, authContext)).rejects.toThrow(
+        /is required$/
+      );
+    });
+
+    test("deleteSentence should not work with non-existent sentences", async () => {
+      await expect(
+        wrappedDeleteSentence({ sentenceId: "wrongId" }, authContext)
+      ).rejects.toThrow("invalid sentence id provided");
+    });
+
+    test("deleteSentence should not work with non-owned sentences", async () => {
+      const authContext2 = await initAuth(functionsTest);
+      const sentenceId = (await mineWords(authContext2, [["猫", "ネコ"]]))[0];
+
+      await expect(
+        wrappedDeleteSentence({ sentenceId }, authContext)
+      ).rejects.toThrow("invalid sentence id provided");
+    });
+
+    test("deleteSentence should not work with non-pending sentences", async () => {
+      const sentenceId = (await mineWords(authContext, [["猫", "ネコ"]]))[0];
+
+      await firestore.collection("sentences").doc(sentenceId).update({
+        isPending: false,
+      });
+
+      await expect(
+        wrappedDeleteSentence({ sentenceId }, authContext)
+      ).rejects.toThrow("invalid sentence id provided");
+    });
+
+    test("deleteSentence should result with the sentence being deleted", async () => {
+      const sentenceId = (await mineWords(authContext, [["猫", "ネコ"]]))[0];
+
+      const oldSentenceDocSnap = await getDocumentFromId(
+        "sentences",
+        sentenceId
+      );
+      expect(oldSentenceDocSnap.exists).toBeTruthy();
+
+      await wrappedDeleteSentence({ sentenceId }, authContext);
+
+      const newSentenceDocSnap = await getDocumentFromId(
+        "sentences",
+        sentenceId
+      );
+      expect(newSentenceDocSnap.exists).toBeFalsy();
+    });
+
+    test("deleteSentence should decrement user's pendingSentence counter", async () => {
+      const oldUserData = await getDocumentDataFromId(
+        "users",
+        authContext.auth.uid
+      );
+      expect(oldUserData?.pendingSentences).toEqual(0);
+
+      const sentenceId = (await mineWords(authContext, [["猫", "ネコ"]]))[0];
+
+      const newUserData = await getDocumentDataFromId(
+        "users",
+        authContext.auth.uid
+      );
+      expect(newUserData?.pendingSentences).toEqual(1);
+
+      await wrappedDeleteSentence({ sentenceId }, authContext);
+
+      const newestUserData = await getDocumentDataFromId(
+        "users",
+        authContext.auth.uid
+      );
+      expect(newestUserData?.pendingSentences).toEqual(0);
+    });
+
+    test("deleteSentence should decrement word's frequency counter", async () => {
+      const sentenceId = (await mineWords(authContext, [["猫", "ネコ"]]))[0];
+      const sentenceData = await getDocumentDataFromId("sentences", sentenceId);
+
+      const oldWordData = await getDocumentDataFromId(
+        "words",
+        sentenceData?.wordId
+      );
+      expect(oldWordData?.frequency).toEqual(1);
+
+      await wrappedDeleteSentence({ sentenceId }, authContext);
+
+      const newWordData = await getDocumentDataFromId(
+        "words",
+        sentenceData?.wordId
+      );
+      expect(newWordData?.frequency).toEqual(0);
+      expect(newWordData?.updatedAt > oldWordData?.updatedAt).toBeTruthy();
+    });
   });
 });
 
-// todo: delete pending sentence
-// todo: decrement frequency of the associated word when pending sentence deleted
-// todo: add max string cap to word and sentence and reading (req validation)
-// todo: make a test that makes sure that non-pending sentences are not counted towards the limit
-// todo: make a test that decrements the currentPending number when sentence deletes
-// todo: make a test that reset the currenPending number when batch mined
+// todo: add better tests for validation

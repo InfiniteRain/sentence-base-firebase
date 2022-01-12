@@ -5,29 +5,6 @@ import { config } from "./config";
 
 admin.initializeApp();
 
-// // Start writing Firebase Functions
-// // https://firebase.google.com/docs/functions/typescript
-//
-// export const helloWorld = functions.https.onRequest((request, response) => {
-//   functions.logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
-
-// export const createWord = functions.firestore
-//   .document("/words/{docId}")
-//   .onCreate((snap) => {
-//     const serverTimestamp = admin.firestore.FieldValue.serverTimestamp();
-
-//     snap.ref.set(
-//       {
-//         frequency: 1,
-//         isMined: false,
-//         createdAt: serverTimestamp,
-//         ,
-//       },
-//       { merge: true }
-//     );
-//   });
 export const createUserDocument = functions.auth
   .user()
   .onCreate(async (user) => {
@@ -45,9 +22,9 @@ export const addSentence = functions.https.onCall(async (data, context) => {
   }
 
   const schema = object({
-    dictionaryForm: string().min(1).required(),
-    reading: string().min(1).required(),
-    sentence: string().min(1).required(),
+    dictionaryForm: string().min(1).max(32).required(),
+    reading: string().min(1).max(64).required(),
+    sentence: string().min(1).max(512).required(),
   });
 
   const { error } = schema.validate(data);
@@ -123,7 +100,11 @@ export const newBatch = functions.https.onCall(async (data, context) => {
   }
 
   const schema = object({
-    sentenceIds: array().items(string()).min(1).required(),
+    sentenceIds: array()
+      .items(string())
+      .min(1)
+      .max(config.maximumPendingSentences)
+      .required(),
   });
 
   const { error } = schema.validate(data);
@@ -138,6 +119,7 @@ export const newBatch = functions.https.onCall(async (data, context) => {
   const sentencesCollection = firestore.collection("sentences");
   const wordsCollection = firestore.collection("words");
   const batchesCollection = firestore.collection("batches");
+  const usersCollection = firestore.collection("users");
   const sentences = [];
   const serverTimestamp = admin.firestore.FieldValue.serverTimestamp();
   const updateBatch = firestore.batch();
@@ -213,7 +195,59 @@ export const newBatch = functions.https.onCall(async (data, context) => {
     updatedAt: serverTimestamp,
   });
 
+  updateBatch.update(usersCollection.doc(context.auth.uid), {
+    pendingSentences: 0,
+  });
+
   await updateBatch.commit();
 
   return sentenceRef.id;
+});
+
+export const deleteSentence = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError("unauthenticated", "not logged in");
+  }
+
+  const schema = object({
+    sentenceId: string().required(),
+  });
+
+  const { error } = schema.validate(data);
+
+  if (error) {
+    throw new functions.https.HttpsError("invalid-argument", error.message);
+  }
+
+  const firestore = admin.firestore();
+  const sentencesCollection = firestore.collection("sentences");
+  const usersCollection = firestore.collection("users");
+  const wordsCollection = firestore.collection("words");
+  const serverTimestamp = admin.firestore.FieldValue.serverTimestamp();
+
+  const sentenceSnapshot = await sentencesCollection
+    .where(admin.firestore.FieldPath.documentId(), "==", data.sentenceId)
+    .where("userUid", "==", context.auth.uid)
+    .where("isPending", "==", true)
+    .limit(1)
+    .get();
+
+  if (sentenceSnapshot.empty) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "invalid sentence id provided"
+    );
+  }
+
+  const sentenceSnap = sentenceSnapshot.docs[0];
+  const wordId = sentenceSnap.data().wordId;
+
+  await sentenceSnap.ref.delete();
+  await usersCollection.doc(context.auth.uid).update({
+    pendingSentences: admin.firestore.FieldValue.increment(-1),
+  });
+  await wordsCollection.doc(wordId).update({
+    frequency: admin.firestore.FieldValue.increment(-1),
+    updatedAt: serverTimestamp,
+  });
 });
