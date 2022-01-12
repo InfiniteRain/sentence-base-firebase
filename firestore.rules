@@ -10,5 +10,15 @@ service cloud.firestore {
       allow read: if request.auth != null
         && resource.data.userUid == request.auth.uid;
     }
+
+    match /sentences/{docId} {
+      allow read: if request.auth != null
+        && resource.data.userUid == request.auth.uid;
+    }
+
+    match /batches/{docId} {
+      allow read: if request.auth != null
+        && resource.data.userUid == request.auth.uid;
+    }
   }
 }
