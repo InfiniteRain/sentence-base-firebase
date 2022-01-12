@@ -190,6 +190,7 @@ export const newBatch = functions.https.onCall(async (data, context) => {
   }
 
   const sentenceRef = await batchesCollection.add({
+    userUid: context.auth.uid,
     sentences,
     createdAt: serverTimestamp,
     updatedAt: serverTimestamp,

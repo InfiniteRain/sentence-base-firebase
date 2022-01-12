@@ -384,6 +384,7 @@ describe("Function tests", () => {
       const batchData = await getDocumentDataFromId("batches", batchId);
 
       expect(batchData).toEqual({
+        userUid: authContext.auth.uid,
         sentences: expect.arrayContaining([
           {
             sentenceId: expect.any(String),
