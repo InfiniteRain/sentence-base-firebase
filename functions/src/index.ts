@@ -2,6 +2,7 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { object, string, array } from "joi";
 import { config } from "./config";
+import FirebaseFirestore from "@google-cloud/firestore";
 
 admin.initializeApp();
 
@@ -252,3 +253,45 @@ export const deleteSentence = functions.https.onCall(async (data, context) => {
     updatedAt: serverTimestamp,
   });
 });
+
+export const getPendingSentences = functions.https.onCall(
+  async (_, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "not logged in");
+    }
+
+    const firestore = admin.firestore();
+    const sentencesCollection = firestore.collection("sentences");
+    const wordsCollection = firestore.collection("words");
+    const sentenceSnapshot = await sentencesCollection
+      .where("userUid", "==", context.auth.uid)
+      .where("isPending", "==", true)
+      .orderBy("createdAt", "desc")
+      .get();
+
+    if (sentenceSnapshot.docs.length === 0) {
+      return [];
+    }
+
+    const wordsToFetch = sentenceSnapshot.docs.map((sentenceDoc) =>
+      wordsCollection.doc(sentenceDoc.data().wordId)
+    );
+    const wordDocs = await firestore.getAll(...wordsToFetch);
+    const wordMap = new Map(
+      wordDocs.map((wordDoc) => [wordDoc.id, wordDoc.data()])
+    );
+
+    return sentenceSnapshot.docs.map((sentenceDoc) => {
+      const sentenceData = sentenceDoc.data();
+      const wordData = wordMap.get(sentenceData.wordId);
+
+      return {
+        sentenceId: sentenceDoc.id,
+        wordId: sentenceData.wordId,
+        dictionaryForm: wordData?.dictionaryForm ?? "unknown",
+        reading: wordData?.reading ?? "unknown",
+        sentence: sentenceData.sentence,
+      };
+    });
+  }
+);

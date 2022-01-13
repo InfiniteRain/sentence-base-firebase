@@ -16,7 +16,12 @@ import {
   AuthContext,
 } from "./helpers";
 import firebaseFunctionsTest from "firebase-functions-test";
-import { addSentence, deleteSentence, newBatch } from "../src";
+import {
+  addSentence,
+  deleteSentence,
+  getPendingSentences,
+  newBatch,
+} from "../src";
 import * as admin from "firebase-admin";
 
 const functionsTest = firebaseFunctionsTest({
@@ -46,6 +51,7 @@ describe("Function tests", () => {
   const wrappedAddSentence = functionsTest.wrap(addSentence);
   const wrappedNewBatch = functionsTest.wrap(newBatch);
   const wrappedDeleteSentence = functionsTest.wrap(deleteSentence);
+  const wrappedGetPendingSentences = functionsTest.wrap(getPendingSentences);
 
   const getDocumentFromId = async (collection: string, id: string) =>
     await firestore.collection(collection).doc(id).get();
@@ -122,6 +128,10 @@ describe("Function tests", () => {
 
     test("deleteSentence should reject", async () => {
       expect(wrappedDeleteSentence({})).rejects.toThrow("not logged in");
+    });
+
+    test("getPendingSentences should reject", async () => {
+      expect(wrappedGetPendingSentences({})).rejects.toThrow("not logged in");
     });
   });
 
@@ -571,6 +581,27 @@ describe("Function tests", () => {
       );
       expect(newWordData?.frequency).toEqual(0);
       expect(newWordData?.updatedAt > oldWordData?.updatedAt).toBeTruthy();
+    });
+
+    test("getPendingSentences should work", async () => {
+      const oldQuery = await wrappedGetPendingSentences({}, authContext);
+
+      expect(oldQuery.length).toEqual(0);
+
+      const sentenceIds = await mineTestWords(authContext);
+      const newQuery = await wrappedGetPendingSentences({}, authContext);
+
+      expect(newQuery.length).toEqual(10);
+      for (const [id, testSentence] of testWords.reverse().entries()) {
+        expect(newQuery[id].dictionaryForm).toEqual(testSentence[0]);
+        expect(newQuery[id].reading).toEqual(testSentence[1]);
+      }
+
+      await wrappedNewBatch({ sentenceIds }, authContext);
+
+      const newestQuery = await wrappedGetPendingSentences({}, authContext);
+
+      expect(newestQuery.length).toEqual(0);
     });
   });
 });
