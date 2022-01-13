@@ -2,7 +2,6 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { object, string, array } from "joi";
 import { config } from "./config";
-import FirebaseFirestore from "@google-cloud/firestore";
 
 admin.initializeApp();
 
