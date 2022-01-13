@@ -593,8 +593,14 @@ describe("Function tests", () => {
 
       expect(newQuery.length).toEqual(10);
       for (const [id, testSentence] of testWords.reverse().entries()) {
-        expect(newQuery[id].dictionaryForm).toEqual(testSentence[0]);
-        expect(newQuery[id].reading).toEqual(testSentence[1]);
+        expect(newQuery[id]).toEqual({
+          sentenceId: expect.any(String),
+          wordId: expect.any(String),
+          dictionaryForm: testSentence[0],
+          reading: testSentence[1],
+          sentence: expect.any(String),
+          frequency: expect.any(Number),
+        });
       }
 
       await wrappedNewBatch({ sentenceIds }, authContext);

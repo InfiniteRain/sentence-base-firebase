@@ -291,6 +291,7 @@ export const getPendingSentences = functions.https.onCall(
         dictionaryForm: wordData?.dictionaryForm ?? "unknown",
         reading: wordData?.reading ?? "unknown",
         sentence: sentenceData.sentence,
+        frequency: wordData?.frequency ?? 0,
       };
     });
   }
