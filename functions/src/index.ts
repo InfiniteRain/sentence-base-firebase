@@ -25,6 +25,7 @@ export const addSentence = functions.https.onCall(async (data, context) => {
     dictionaryForm: string().min(1).max(32).required(),
     reading: string().min(1).max(64).required(),
     sentence: string().min(1).max(512).required(),
+    tags: array().items(string()).required(),
   });
 
   const { error } = schema.validate(data);
@@ -33,7 +34,7 @@ export const addSentence = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError("invalid-argument", error.message);
   }
 
-  const { dictionaryForm, reading, sentence } = data;
+  const { dictionaryForm, reading, sentence, tags } = data;
   const firestore = admin.firestore();
   const wordsCollection = firestore.collection("words");
   const sentencesCollection = firestore.collection("sentences");
@@ -83,6 +84,7 @@ export const addSentence = functions.https.onCall(async (data, context) => {
     sentence,
     isPending: true,
     isMined: false,
+    tags,
     createdAt: serverTimestamp,
     updatedAt: serverTimestamp,
   });

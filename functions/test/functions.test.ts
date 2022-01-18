@@ -79,6 +79,7 @@ describe("Function tests", () => {
           dictionaryForm,
           reading,
           sentence: `${dictionaryForm}の文`,
+          tags: [],
         },
         authContext
       );
@@ -162,6 +163,7 @@ describe("Function tests", () => {
           dictionaryForm: testDictionaryForm,
           reading: testReading,
           sentence: testSentence,
+          tags: ["some", "tags"],
         },
         authContext
       );
@@ -177,6 +179,7 @@ describe("Function tests", () => {
         sentence: testSentence,
         isPending: true,
         isMined: false,
+        tags: ["some", "tags"],
         createdAt: timestampMatcher,
         updatedAt: timestampMatcher,
       });
@@ -210,6 +213,7 @@ describe("Function tests", () => {
             dictionaryForm: testDictionaryForm,
             reading: testReading,
             sentence: testSentence,
+            tags: [],
           },
           authContext
         );
@@ -228,6 +232,7 @@ describe("Function tests", () => {
           sentence: sentenceSnapData?.sentence,
           isPending: true,
           isMined: false,
+          tags: [],
           createdAt: timestampMatcher,
           updatedAt: timestampMatcher,
         });
@@ -268,6 +273,7 @@ describe("Function tests", () => {
             dictionaryForm: "猫",
             reading: "ネコ",
             sentence: `${i}匹目の猫が現れる`,
+            tags: [],
           },
           authContext
         );
@@ -288,6 +294,7 @@ describe("Function tests", () => {
           dictionaryForm: "猫",
           reading: "ネコ",
           sentence: "もう一匹の猫が現れる",
+          tags: [],
         },
         authContext
       );
@@ -326,6 +333,7 @@ describe("Function tests", () => {
           dictionaryForm: newWordData?.dictionaryForm,
           reading: newWordData?.reading,
           sentence: `${newWordData?.dictionaryForm}の文`,
+          tags: [],
         },
         authContext
       );
