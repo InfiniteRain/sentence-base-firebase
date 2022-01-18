@@ -161,12 +161,14 @@ export const newBatch = functions.https.onCall(async (data, context) => {
 
     const wordDocumentSnap = wordSnapshot.docs[0];
     const wordData = wordDocumentSnap.data();
+    const sentenceData = sentenceDocumentSnap.data();
 
     sentences.push({
       sentenceId: sentenceDocumentSnap.id,
-      sentence: sentenceDocumentSnap.data().sentence,
+      sentence: sentenceData.sentence,
       wordDictionaryForm: wordData.dictionaryForm,
       wordReading: wordData.reading,
+      tags: sentenceData.tags,
     });
 
     updateBatch.update(sentenceDocumentSnap.ref, {
@@ -293,6 +295,7 @@ export const getPendingSentences = functions.https.onCall(
         reading: wordData?.reading ?? "unknown",
         sentence: sentenceData.sentence,
         frequency: wordData?.frequency ?? 0,
+        tags: sentenceData.tags,
       };
     });
   }

@@ -79,7 +79,7 @@ describe("Function tests", () => {
           dictionaryForm,
           reading,
           sentence: `${dictionaryForm}の文`,
-          tags: [],
+          tags: ["some", "tags"],
         },
         authContext
       );
@@ -409,6 +409,7 @@ describe("Function tests", () => {
             sentence: expect.any(String),
             wordDictionaryForm: expect.any(String),
             wordReading: expect.any(String),
+            tags: ["some", "tags"],
           },
         ]),
         createdAt: timestampMatcher,
@@ -608,6 +609,7 @@ describe("Function tests", () => {
           reading: testSentence[1],
           sentence: expect.any(String),
           frequency: expect.any(Number),
+          tags: ["some", "tags"],
         });
       }
 
