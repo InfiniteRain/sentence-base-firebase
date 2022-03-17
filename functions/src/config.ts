@@ -1,3 +1,3 @@
 export const config = {
-  maximumPendingSentences: 200,
+  maximumPendingSentences: process.env.FUNCTIONS_EMULATOR !== "true" ? 200 : 15,
 };

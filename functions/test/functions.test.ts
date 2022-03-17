@@ -1,31 +1,16 @@
-process.env.FIRESTORE_EMULATOR_HOST = "localhost:8080";
-
-const maximumPendingSentences = 15;
-
-jest.mock("../src/config", () => ({
-  config: {
-    maximumPendingSentences,
-  },
-}));
-
+import "./setup-env";
 import {
   projectId,
   timestampMatcher,
-  cleanFirestore,
+  clean,
   initAuth,
-  AuthContext,
+  expectErrors,
 } from "./helpers";
-import firebaseFunctionsTest from "firebase-functions-test";
-import {
-  addSentence,
-  deleteSentence,
-  getPendingSentences,
-  newBatch,
-} from "../src";
+import { addSentence } from "./helpers";
 import * as admin from "firebase-admin";
 
-const functionsTest = firebaseFunctionsTest({
-  projectId: `${projectId}-tests`,
+admin.initializeApp({
+  projectId: `${projectId}`,
 });
 
 describe("Function tests", () => {
@@ -48,11 +33,6 @@ describe("Function tests", () => {
 
   const firestore = admin.firestore();
 
-  const wrappedAddSentence = functionsTest.wrap(addSentence);
-  const wrappedNewBatch = functionsTest.wrap(newBatch);
-  const wrappedDeleteSentence = functionsTest.wrap(deleteSentence);
-  const wrappedGetPendingSentences = functionsTest.wrap(getPendingSentences);
-
   const getDocumentFromId = async (collection: string, id: string) =>
     await firestore.collection(collection).doc(id).get();
 
@@ -68,51 +48,44 @@ describe("Function tests", () => {
   };
 
   const mineWords = async (
-    authContext: AuthContext,
-    words: [string, string][]
+    words: [string, string][],
+    token: string
   ): Promise<string[]> => {
     const sentenceIds: string[] = [];
 
     for (const [dictionaryForm, reading] of words) {
-      const sentenceId = await wrappedAddSentence(
-        {
-          dictionaryForm,
-          reading,
-          sentence: `${dictionaryForm}の文`,
-          tags: ["some", "tags"],
-        },
-        authContext
+      const result = await addSentence(
+        dictionaryForm,
+        reading,
+        `${dictionaryForm}の文`,
+        ["some", "tags"],
+        token
       );
 
-      sentenceIds.push(sentenceId);
+      sentenceIds.push(result.data.sentenceId);
     }
 
     return sentenceIds;
   };
 
-  const mineTestWords = async (authContext: AuthContext): Promise<string[]> =>
-    await mineWords(authContext, testWords);
+  const mineTestWords = async (token: string): Promise<string[]> =>
+    await mineWords(testWords, token);
 
   beforeEach(async () => {
-    await cleanFirestore(firestore);
-  });
-
-  afterAll(() => {
-    functionsTest.cleanup();
+    await clean();
   });
 
   describe("logged out", () => {
+    jest.setTimeout(10000);
+
     test("createUserDocument should create new user document", async () => {
       await expect(getDocumentCount("users")).resolves.toEqual(0);
 
-      const authContext = await initAuth(functionsTest);
+      const [user] = await initAuth();
 
       await expect(getDocumentCount("users")).resolves.toEqual(1);
 
-      const userData = await getDocumentDataFromId(
-        "users",
-        authContext.auth.uid
-      );
+      const userData = await getDocumentDataFromId("users", user.uid);
 
       expect(userData).toEqual({
         pendingSentences: 0,
@@ -120,9 +93,12 @@ describe("Function tests", () => {
     });
 
     test("addSentence should reject", async () => {
-      expect(wrappedAddSentence({})).rejects.toThrow("not logged in");
+      await expectErrors(addSentence("猫", "ネコ", "これは猫です。", []), [
+        "Not logged in.",
+      ]);
     });
 
+    /*
     test("newBatch should reject", async () => {
       expect(wrappedNewBatch({})).rejects.toThrow("not logged in");
     });
@@ -133,24 +109,19 @@ describe("Function tests", () => {
 
     test("getPendingSentences should reject", async () => {
       expect(wrappedGetPendingSentences({})).rejects.toThrow("not logged in");
-    });
+    });*/
   });
 
   describe("logged in", () => {
-    let authContext!: {
-      auth: {
-        uid: string;
-      };
-    };
+    let user!: admin.auth.UserRecord;
+    let token!: string;
 
     beforeEach(async () => {
-      authContext = await initAuth(functionsTest);
+      [user, token] = await initAuth();
     });
 
     test("addSentence should validate", async () => {
-      expect(wrappedAddSentence({}, authContext)).rejects.toThrow(
-        /is required$/
-      );
+      await expectErrors(addSentence("", "", "", [], token));
     });
 
     test("addSentence should result with a word and a sentence added", async () => {
@@ -158,23 +129,21 @@ describe("Function tests", () => {
       const testReading = "ネコ";
       const testSentence = "これは猫です。";
 
-      const sentenceId = await wrappedAddSentence(
-        {
-          dictionaryForm: testDictionaryForm,
-          reading: testReading,
-          sentence: testSentence,
-          tags: ["some", "tags"],
-        },
-        authContext
+      const result = await addSentence(
+        testDictionaryForm,
+        testReading,
+        testSentence,
+        ["some", "tags"],
+        token
       );
 
       const sentenceSnapData = await getDocumentDataFromId(
         "sentences",
-        sentenceId
+        result.data.sentenceId
       );
 
       expect(sentenceSnapData).toEqual({
-        userUid: authContext.auth.uid,
+        userUid: user.uid,
         wordId: expect.any(String),
         sentence: testSentence,
         isPending: true,
@@ -190,7 +159,7 @@ describe("Function tests", () => {
       );
 
       expect(wordSnapData).toEqual({
-        userUid: authContext.auth.uid,
+        userUid: user.uid,
         dictionaryForm: testDictionaryForm,
         reading: testReading,
         frequency: 1,
@@ -208,26 +177,24 @@ describe("Function tests", () => {
       let wordId: string | undefined;
 
       for (const testSentence of testSentences) {
-        const sentenceId = await wrappedAddSentence(
-          {
-            dictionaryForm: testDictionaryForm,
-            reading: testReading,
-            sentence: testSentence,
-            tags: [],
-          },
-          authContext
+        const result = await addSentence(
+          testDictionaryForm,
+          testReading,
+          testSentence,
+          [],
+          token
         );
 
         const sentenceSnapData = await getDocumentDataFromId(
           "sentences",
-          sentenceId
+          result.data.sentenceId
         );
 
         wordId = wordId ?? sentenceSnapData?.wordId;
 
         expect(wordId).toBeDefined();
         expect(sentenceSnapData).toEqual({
-          userUid: authContext.auth.uid,
+          userUid: user.uid,
           wordId,
           sentence: sentenceSnapData?.sentence,
           isPending: true,
@@ -241,7 +208,7 @@ describe("Function tests", () => {
       const wordSnapData = await getDocumentDataFromId("words", wordId ?? "");
 
       expect(wordSnapData).toEqual({
-        userUid: authContext.auth.uid,
+        userUid: user.uid,
         dictionaryForm: testDictionaryForm,
         reading: testReading,
         frequency: 3,
@@ -255,60 +222,46 @@ describe("Function tests", () => {
 
       const existingWordRef = await firestore
         .collection("words")
-        .where("userUid", "==", authContext.auth.uid)
+        .where("userUid", "==", user.uid)
         .get();
       expect(existingWordRef.docs.length).toEqual(1);
     });
 
     test("addSentence should not add more sentences after the limit has been reached", async () => {
-      const oldUserData = await getDocumentDataFromId(
-        "users",
-        authContext.auth.uid
-      );
+      const maximumPendingSentences = 15;
+      const oldUserData = await getDocumentDataFromId("users", user.uid);
       expect(oldUserData?.pendingSentences).toEqual(0);
 
       for (let i = 0; i < maximumPendingSentences; i++) {
-        await wrappedAddSentence(
-          {
-            dictionaryForm: "猫",
-            reading: "ネコ",
-            sentence: `${i}匹目の猫が現れる`,
-            tags: [],
-          },
-          authContext
-        );
+        await addSentence("猫", "ネコ", `${i}匹目の猫が現れる`, [], token);
       }
 
-      const newUserData = await getDocumentDataFromId(
-        "users",
-        authContext.auth.uid
-      );
+      const newUserData = await getDocumentDataFromId("users", user.uid);
 
       expect(newUserData?.pendingSentences).toEqual(maximumPendingSentences);
       await expect(getDocumentCount("sentences")).resolves.toEqual(
         maximumPendingSentences
       );
 
-      const addSentencePromise = wrappedAddSentence(
-        {
-          dictionaryForm: "猫",
-          reading: "ネコ",
-          sentence: "もう一匹の猫が現れる",
-          tags: [],
-        },
-        authContext
+      const addSentencePromise = addSentence(
+        "猫",
+        "ネコ",
+        "もう一匹の猫が現れる",
+        [],
+        token
       );
 
-      await expect(addSentencePromise).rejects.toThrow(
-        "pending sentences limit reached"
-      );
+      await expectErrors(addSentencePromise, [
+        "Pending sentences limit reached.",
+      ]);
       await expect(getDocumentCount("sentences")).resolves.toEqual(
         maximumPendingSentences
       );
     });
 
+    /*
     test("addSentence should set isMined to false after the word has been mined again", async () => {
-      const sentenceIds = await mineTestWords(authContext);
+      const sentenceIds = await mineTestWords(token);
       const sentenceData = await getDocumentDataFromId(
         "sentences",
         sentenceIds[0]
@@ -345,6 +298,7 @@ describe("Function tests", () => {
       expect(newestWordData?.isMined).toEqual(false);
     });
 
+    /*
     test("newBatch should validate", async () => {
       await expect(wrappedNewBatch({}, authContext)).rejects.toThrow(
         /is required$/
@@ -618,7 +572,7 @@ describe("Function tests", () => {
       const newestQuery = await wrappedGetPendingSentences({}, authContext);
 
       expect(newestQuery.length).toEqual(0);
-    });
+    });*/
   });
 });
 
