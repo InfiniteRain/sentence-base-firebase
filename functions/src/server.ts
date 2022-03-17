@@ -40,6 +40,51 @@ server.use(async (req, _res, next) => {
   next();
 });
 
+server.get("/sentences", async (req, res) => {
+  if (!req.user) {
+    authenticationError(res);
+    return;
+  }
+
+  const firestore = admin.firestore();
+  const sentencesCollection = firestore.collection("sentences");
+  const wordsCollection = firestore.collection("words");
+  const sentenceSnapshot = await sentencesCollection
+    .where("userUid", "==", req.user.uid)
+    .where("isPending", "==", true)
+    .orderBy("createdAt", "desc")
+    .get();
+
+  if (sentenceSnapshot.docs.length === 0) {
+    successResponse(res, { sentences: [] });
+    return;
+  }
+
+  const wordsToFetch = sentenceSnapshot.docs.map((sentenceDoc) =>
+    wordsCollection.doc(sentenceDoc.data().wordId)
+  );
+  const wordDocs = await firestore.getAll(...wordsToFetch);
+  const wordMap = new Map(
+    wordDocs.map((wordDoc) => [wordDoc.id, wordDoc.data()])
+  );
+  const sentences = sentenceSnapshot.docs.map((sentenceDoc) => {
+    const sentenceData = sentenceDoc.data();
+    const wordData = wordMap.get(sentenceData.wordId);
+
+    return {
+      sentenceId: sentenceDoc.id,
+      wordId: sentenceData.wordId,
+      dictionaryForm: wordData?.dictionaryForm ?? "unknown",
+      reading: wordData?.reading ?? "unknown",
+      sentence: sentenceData.sentence,
+      frequency: wordData?.frequency ?? 0,
+      tags: sentenceData.tags,
+    };
+  });
+
+  successResponse(res, { sentences });
+});
+
 server.post(
   "/sentences",
   body(

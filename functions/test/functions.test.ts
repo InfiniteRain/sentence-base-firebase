@@ -9,6 +9,7 @@ import {
   addSentence,
   newBatch,
   deleteSentence,
+  getPendingSentences,
 } from "./helpers";
 import * as admin from "firebase-admin";
 
@@ -109,10 +110,9 @@ describe("Function tests", () => {
       await expectErrors(deleteSentence("xxx"), ["Not logged in."]);
     });
 
-    /*
     test("getPendingSentences should reject", async () => {
-      expect(wrappedGetPendingSentences({})).rejects.toThrow("not logged in");
-    });*/
+      await expectErrors(getPendingSentences(), ["Not logged in."]);
+    });
   });
 
   describe("logged in", () => {
@@ -510,18 +510,16 @@ describe("Function tests", () => {
       expect(newWordData?.updatedAt > oldWordData?.updatedAt).toBeTruthy();
     });
 
-    /*
     test("getPendingSentences should work", async () => {
-      const oldQuery = await wrappedGetPendingSentences({}, authContext);
+      const oldQueryResult = await getPendingSentences(token);
+      expect(oldQueryResult.data.sentences.length).toEqual(0);
 
-      expect(oldQuery.length).toEqual(0);
+      const sentenceIds = await mineTestWords(token);
+      const newQueryResult = await getPendingSentences(token);
 
-      const sentenceIds = await mineTestWords(authContext);
-      const newQuery = await wrappedGetPendingSentences({}, authContext);
-
-      expect(newQuery.length).toEqual(10);
+      expect(newQueryResult.data.sentences.length).toEqual(10);
       for (const [id, testSentence] of testWords.reverse().entries()) {
-        expect(newQuery[id]).toEqual({
+        expect(newQueryResult.data.sentences[id]).toEqual({
           sentenceId: expect.any(String),
           wordId: expect.any(String),
           dictionaryForm: testSentence[0],
@@ -532,12 +530,12 @@ describe("Function tests", () => {
         });
       }
 
-      await wrappedNewBatch({ sentenceIds }, authContext);
+      await newBatch(sentenceIds, token);
 
-      const newestQuery = await wrappedGetPendingSentences({}, authContext);
+      const newestQuery = await getPendingSentences(token);
 
-      expect(newestQuery.length).toEqual(0);
-    });*/
+      expect(newestQuery.data.sentences.length).toEqual(0);
+    });
   });
 });
 

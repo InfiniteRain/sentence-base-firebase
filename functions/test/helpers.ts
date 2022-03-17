@@ -148,3 +148,12 @@ export const deleteSentence = async (sentenceId: string, token?: string) => {
   });
   return await response.json();
 };
+
+export const getPendingSentences = async (token?: string) => {
+  const response = await fetch(`${apiUrl}/sentences`, {
+    headers: new Headers({
+      Authorization: token ? `Bearer ${token}` : "",
+    }),
+  });
+  return await response.json();
+};
