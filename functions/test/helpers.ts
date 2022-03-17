@@ -1,9 +1,7 @@
-import * as FirebaseFirestore from "@google-cloud/firestore";
 import firebaseJson from "../../firebase.json";
 import fetch, { Headers } from "node-fetch";
 import { nanoid } from "nanoid/non-secure";
 import * as admin from "firebase-admin";
-import { user } from "firebase-functions/v1/auth";
 
 export const apiUrl = `http://localhost:${firebaseJson.emulators.functions.port}/sentence-base/us-central1/api/v1`;
 export const authUrl = `http://localhost:${firebaseJson.emulators.auth.port}/www.googleapis.com/identitytoolkit/v3/relyingparty/verifyCustomToken?key=${process.env.FIREBASE_API_KEY}`;
@@ -83,7 +81,7 @@ export const initAuth = async (): Promise<[admin.auth.UserRecord, string]> => {
   const id = nanoid();
   const user = await admin.auth().createUser({
     email: `${id}@example.com`,
-    password: `password`,
+    password: "assword",
     displayName: `user-${id}`,
   });
 

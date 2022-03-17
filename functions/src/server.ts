@@ -36,7 +36,9 @@ server.use(async (req, _res, next) => {
 
   try {
     req.user = await admin.auth().verifyIdToken(token);
-  } catch {}
+  } catch {
+    //
+  }
 
   next();
 });
@@ -54,9 +56,11 @@ server.use("/v1/batches", batchesRouter);
 /**
  * Handle internal server errors.
  */
-server.use((_error: any, _req: Request, res: Response, _next: NextFunction) => {
-  res.status(500).send({ success: false, error: "Internal server error." });
-});
+server.use(
+  (_error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    res.status(500).send({ success: false, error: "Internal server error." });
+  }
+);
 
 /**
  * Handle 404 errors.

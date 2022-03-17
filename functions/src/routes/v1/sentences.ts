@@ -1,4 +1,4 @@
-import express from "express";
+import { Router as createRouter } from "express";
 import {
   authenticationError,
   errorResponse,
@@ -9,7 +9,7 @@ import { body, validationResult } from "express-validator";
 import * as admin from "firebase-admin";
 import { config } from "../../config";
 
-export const sentencesRouter = express.Router();
+export const sentencesRouter = createRouter();
 
 sentencesRouter
   .route("/")

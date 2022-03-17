@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import { server } from "./server";
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       user?: admin.auth.DecodedIdToken;
