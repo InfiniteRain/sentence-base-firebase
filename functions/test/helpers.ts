@@ -15,12 +15,21 @@ export const timestampMatcher = {
 };
 
 export const expectErrors = async (
-  responsePromise: Promise<any>,
+  responsePromise: Promise<unknown>,
   messages?: string[]
 ) =>
   await expect(responsePromise).resolves.toEqual({
     success: false,
     errors: messages ?? expect.any(Array),
+  });
+
+export const expectSuccess = async (
+  responsePromise: Promise<unknown>,
+  data: unknown
+) =>
+  await expect(responsePromise).resolves.toEqual({
+    success: true,
+    data,
   });
 
 export const clean = async () => {
@@ -107,6 +116,20 @@ export const addSentence = async (
       reading,
       sentence,
       tags,
+    }),
+    headers: new Headers({
+      "Content-Type": "application/json",
+      Authorization: token ? `Bearer ${token}` : "",
+    }),
+  });
+  return await response.json();
+};
+
+export const newBatch = async (sentences: string[], token?: string) => {
+  const response = await fetch(`${apiUrl}/batches`, {
+    method: "post",
+    body: JSON.stringify({
+      sentences,
     }),
     headers: new Headers({
       "Content-Type": "application/json",

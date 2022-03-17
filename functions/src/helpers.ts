@@ -1,7 +1,11 @@
 import { Response } from "express";
 import { ValidationError } from "express-validator";
 
-export const errorResponse = (res: Response, code: number, errors: unknown) => {
+export const errorResponse = (
+  res: Response,
+  code: number,
+  errors: unknown[]
+) => {
   res.status(code).send({ success: false, errors });
 };
 

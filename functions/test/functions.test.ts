@@ -5,8 +5,10 @@ import {
   clean,
   initAuth,
   expectErrors,
+  expectSuccess,
+  addSentence,
+  newBatch,
 } from "./helpers";
-import { addSentence } from "./helpers";
 import * as admin from "firebase-admin";
 
 admin.initializeApp({
@@ -98,11 +100,11 @@ describe("Function tests", () => {
       ]);
     });
 
-    /*
     test("newBatch should reject", async () => {
-      expect(wrappedNewBatch({})).rejects.toThrow("not logged in");
+      await expectErrors(newBatch(["これは猫です。"]), ["Not logged in."]);
     });
 
+    /*
     test("deleteSentence should reject", async () => {
       expect(wrappedDeleteSentence({})).rejects.toThrow("not logged in");
     });
@@ -259,7 +261,6 @@ describe("Function tests", () => {
       );
     });
 
-    /*
     test("addSentence should set isMined to false after the word has been mined again", async () => {
       const sentenceIds = await mineTestWords(token);
       const sentenceData = await getDocumentDataFromId(
@@ -273,7 +274,7 @@ describe("Function tests", () => {
       );
       expect(oldWordData?.isMined).toEqual(false);
 
-      await wrappedNewBatch({ sentenceIds }, authContext);
+      await newBatch(sentenceIds, token);
 
       const newWordData = await getDocumentDataFromId(
         "words",
@@ -281,14 +282,12 @@ describe("Function tests", () => {
       );
       expect(newWordData?.isMined).toEqual(true);
 
-      await wrappedAddSentence(
-        {
-          dictionaryForm: newWordData?.dictionaryForm,
-          reading: newWordData?.reading,
-          sentence: `${newWordData?.dictionaryForm}の文`,
-          tags: [],
-        },
-        authContext
+      await addSentence(
+        newWordData?.dictionaryForm,
+        newWordData?.reading,
+        `${newWordData?.dictionaryForm}の文`,
+        [],
+        token
       );
 
       const newestWordData = await getDocumentDataFromId(
@@ -298,65 +297,50 @@ describe("Function tests", () => {
       expect(newestWordData?.isMined).toEqual(false);
     });
 
-    /*
     test("newBatch should validate", async () => {
-      await expect(wrappedNewBatch({}, authContext)).rejects.toThrow(
-        /is required$/
-      );
+      await expectErrors(newBatch([], token));
     });
 
     test("newBatch should not work with non-existent sentences", async () => {
-      await expect(
-        wrappedNewBatch(
-          {
-            sentenceIds: ["wrongId"],
-          },
-          authContext
-        )
-      ).rejects.toThrow("invalid sentence ids provided");
+      await expectErrors(newBatch(["wrongId"], token), [
+        "Invalid sentence IDs provided.",
+      ]);
     });
 
     test("newBatch should not work with non-owned sentences", async () => {
-      const authContext2 = await initAuth(functionsTest);
-      const sentenceId = (await mineWords(authContext2, [["猫", "ネコ"]]))[0];
+      const [_user2, token2] = await initAuth();
+      const sentenceId = (await mineWords([["猫", "ネコ"]], token2))[0];
 
-      await expect(
-        wrappedNewBatch(
-          {
-            sentenceIds: [sentenceId],
-          },
-          authContext
-        )
-      ).rejects.toThrow("invalid sentence ids provided");
+      await expectErrors(newBatch([sentenceId], token), [
+        "Invalid sentence IDs provided.",
+      ]);
     });
 
     test("newBatch should not work with non-pending sentences", async () => {
-      const sentenceId = (await mineWords(authContext, [["猫", "ネコ"]]))[0];
+      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
 
       await firestore.collection("sentences").doc(sentenceId).update({
         isPending: false,
       });
 
-      await expect(
-        wrappedNewBatch(
-          {
-            sentenceIds: [sentenceId],
-          },
-          authContext
-        )
-      ).rejects.toThrow("invalid sentence ids provided");
+      await expectErrors(newBatch([sentenceId], token), [
+        "Invalid sentence IDs provided.",
+      ]);
     });
 
     test("newBatch should result with a batch being added", async () => {
-      const sentenceIds = await mineTestWords(authContext);
-      const batchId = await wrappedNewBatch({ sentenceIds }, authContext);
+      const sentenceIds = await mineTestWords(token);
+      const result = await newBatch(sentenceIds, token);
 
-      expect(batchId).toEqual(expect.any(String));
+      expect(result.data.batchId).toEqual(expect.any(String));
 
-      const batchData = await getDocumentDataFromId("batches", batchId);
+      const batchData = await getDocumentDataFromId(
+        "batches",
+        result.data.batchId
+      );
 
       expect(batchData).toEqual({
-        userUid: authContext.auth.uid,
+        userUid: user.uid,
         sentences: expect.arrayContaining([
           {
             sentenceId: expect.any(String),
@@ -372,11 +356,14 @@ describe("Function tests", () => {
     });
 
     test("newBatch should change isMined and isPending accordingly", async () => {
-      const sentenceIdsToMine = await mineTestWords(authContext);
-      const sentenceIdsToIgnore = await mineWords(authContext, [
-        ["魚", "サカナ"],
-        ["牛乳", "ギュウニュウ"],
-      ]);
+      const sentenceIdsToMine = await mineTestWords(token);
+      const sentenceIdsToIgnore = await mineWords(
+        [
+          ["魚", "サカナ"],
+          ["牛乳", "ギュウニュウ"],
+        ],
+        token
+      );
 
       for (const sentenceId of [...sentenceIdsToMine, ...sentenceIdsToIgnore]) {
         const sentenceData = await getDocumentDataFromId(
@@ -395,7 +382,7 @@ describe("Function tests", () => {
         expect(wordData?.isMined).toEqual(false);
       }
 
-      await wrappedNewBatch({ sentenceIds: sentenceIdsToMine }, authContext);
+      await newBatch(sentenceIdsToMine, token);
 
       for (const sentenceId of [...sentenceIdsToMine, ...sentenceIdsToIgnore]) {
         const isIgnored = sentenceIdsToIgnore.includes(sentenceId);
@@ -418,39 +405,31 @@ describe("Function tests", () => {
     });
 
     test("newBatch should not work with the same batch being submitted twice", async () => {
-      const sentenceIds = await mineTestWords(authContext);
-      await expect(
-        wrappedNewBatch({ sentenceIds }, authContext)
-      ).resolves.toEqual(expect.any(String));
-      await expect(
-        wrappedNewBatch({ sentenceIds }, authContext)
-      ).rejects.toThrow("invalid sentence ids provided");
+      const sentenceIds = await mineTestWords(token);
+      await expectSuccess(newBatch(sentenceIds, token), {
+        batchId: expect.any(String),
+      });
+      await expectErrors(newBatch(sentenceIds, token), [
+        "Invalid sentence IDs provided.",
+      ]);
     });
 
     test("newBatch should reset the user's pendingSentences counter", async () => {
-      const oldUserData = await getDocumentDataFromId(
-        "users",
-        authContext.auth.uid
-      );
+      const oldUserData = await getDocumentDataFromId("users", user.uid);
       expect(oldUserData?.pendingSentences).toEqual(0);
 
-      const sentenceIds = await mineTestWords(authContext);
+      const sentenceIds = await mineTestWords(token);
 
-      const newUserData = await getDocumentDataFromId(
-        "users",
-        authContext.auth.uid
-      );
+      const newUserData = await getDocumentDataFromId("users", user.uid);
       expect(newUserData?.pendingSentences).toEqual(10);
 
-      await wrappedNewBatch({ sentenceIds }, authContext);
+      await newBatch(sentenceIds, token);
 
-      const newestUserData = await getDocumentDataFromId(
-        "users",
-        authContext.auth.uid
-      );
+      const newestUserData = await getDocumentDataFromId("users", user.uid);
       expect(newestUserData?.pendingSentences).toEqual(0);
     });
 
+    /* 
     test("deleteSentence should validate", async () => {
       await expect(wrappedDeleteSentence({}, authContext)).rejects.toThrow(
         /is required$/
