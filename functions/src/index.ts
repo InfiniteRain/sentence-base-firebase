@@ -12,8 +12,9 @@ declare global {
 
 admin.initializeApp();
 
-export const api = functions.https.onRequest(server);
-
+/**
+ * Creates a user document upon registration.
+ */
 export const createUserDocument = functions.auth
   .user()
   .onCreate(async (user) => {
@@ -24,3 +25,8 @@ export const createUserDocument = functions.auth
       pendingSentences: 0,
     });
   });
+
+/**
+ * Exposes the REST API through the HTTPS function.
+ */
+export const api = functions.https.onRequest(server);
