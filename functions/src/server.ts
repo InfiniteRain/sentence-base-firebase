@@ -139,6 +139,45 @@ server.post(
   }
 );
 
+server.delete("/sentences/:sentenceId", async (req, res) => {
+  if (!req.user) {
+    authenticationError(res);
+    return;
+  }
+
+  const firestore = admin.firestore();
+  const sentencesCollection = firestore.collection("sentences");
+  const usersCollection = firestore.collection("users");
+  const wordsCollection = firestore.collection("words");
+  const serverTimestamp = admin.firestore.FieldValue.serverTimestamp();
+
+  const sentenceSnapshot = await sentencesCollection
+    .where(admin.firestore.FieldPath.documentId(), "==", req.params.sentenceId)
+    .where("userUid", "==", req.user.uid)
+    .where("isPending", "==", true)
+    .limit(1)
+    .get();
+
+  if (sentenceSnapshot.empty) {
+    errorResponse(res, 400, ["Invalid sentence ID provided."]);
+    return;
+  }
+
+  const sentenceSnap = sentenceSnapshot.docs[0];
+  const wordId = sentenceSnap.data().wordId;
+
+  await sentenceSnap.ref.delete();
+  await usersCollection.doc(req.user.uid).update({
+    pendingSentences: admin.firestore.FieldValue.increment(-1),
+  });
+  await wordsCollection.doc(wordId).update({
+    frequency: admin.firestore.FieldValue.increment(-1),
+    updatedAt: serverTimestamp,
+  });
+
+  successResponse(res);
+});
+
 server.post(
   "/batches",
   body(

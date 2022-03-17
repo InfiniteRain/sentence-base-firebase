@@ -8,6 +8,7 @@ import {
   expectSuccess,
   addSentence,
   newBatch,
+  deleteSentence,
 } from "./helpers";
 import * as admin from "firebase-admin";
 
@@ -104,11 +105,11 @@ describe("Function tests", () => {
       await expectErrors(newBatch(["これは猫です。"]), ["Not logged in."]);
     });
 
-    /*
     test("deleteSentence should reject", async () => {
-      expect(wrappedDeleteSentence({})).rejects.toThrow("not logged in");
+      await expectErrors(deleteSentence("xxx"), ["Not logged in."]);
     });
 
+    /*
     test("getPendingSentences should reject", async () => {
       expect(wrappedGetPendingSentences({})).rejects.toThrow("not logged in");
     });*/
@@ -429,42 +430,35 @@ describe("Function tests", () => {
       expect(newestUserData?.pendingSentences).toEqual(0);
     });
 
-    /* 
-    test("deleteSentence should validate", async () => {
-      await expect(wrappedDeleteSentence({}, authContext)).rejects.toThrow(
-        /is required$/
-      );
-    });
-
     test("deleteSentence should not work with non-existent sentences", async () => {
-      await expect(
-        wrappedDeleteSentence({ sentenceId: "wrongId" }, authContext)
-      ).rejects.toThrow("invalid sentence id provided");
+      await expectErrors(deleteSentence("wrongId", token), [
+        "Invalid sentence ID provided.",
+      ]);
     });
 
     test("deleteSentence should not work with non-owned sentences", async () => {
-      const authContext2 = await initAuth(functionsTest);
-      const sentenceId = (await mineWords(authContext2, [["猫", "ネコ"]]))[0];
+      const [_user2, token2] = await initAuth();
+      const sentenceId = (await mineWords([["猫", "ネコ"]], token2))[0];
 
-      await expect(
-        wrappedDeleteSentence({ sentenceId }, authContext)
-      ).rejects.toThrow("invalid sentence id provided");
+      await expectErrors(deleteSentence(sentenceId, token), [
+        "Invalid sentence ID provided.",
+      ]);
     });
 
     test("deleteSentence should not work with non-pending sentences", async () => {
-      const sentenceId = (await mineWords(authContext, [["猫", "ネコ"]]))[0];
+      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
 
       await firestore.collection("sentences").doc(sentenceId).update({
         isPending: false,
       });
 
-      await expect(
-        wrappedDeleteSentence({ sentenceId }, authContext)
-      ).rejects.toThrow("invalid sentence id provided");
+      await expectErrors(deleteSentence(sentenceId, token), [
+        "Invalid sentence ID provided.",
+      ]);
     });
 
     test("deleteSentence should result with the sentence being deleted", async () => {
-      const sentenceId = (await mineWords(authContext, [["猫", "ネコ"]]))[0];
+      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
 
       const oldSentenceDocSnap = await getDocumentFromId(
         "sentences",
@@ -472,7 +466,7 @@ describe("Function tests", () => {
       );
       expect(oldSentenceDocSnap.exists).toBeTruthy();
 
-      await wrappedDeleteSentence({ sentenceId }, authContext);
+      await expectSuccess(deleteSentence(sentenceId, token));
 
       const newSentenceDocSnap = await getDocumentFromId(
         "sentences",
@@ -482,31 +476,22 @@ describe("Function tests", () => {
     });
 
     test("deleteSentence should decrement user's pendingSentence counter", async () => {
-      const oldUserData = await getDocumentDataFromId(
-        "users",
-        authContext.auth.uid
-      );
+      const oldUserData = await getDocumentDataFromId("users", user.uid);
       expect(oldUserData?.pendingSentences).toEqual(0);
 
-      const sentenceId = (await mineWords(authContext, [["猫", "ネコ"]]))[0];
+      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
 
-      const newUserData = await getDocumentDataFromId(
-        "users",
-        authContext.auth.uid
-      );
+      const newUserData = await getDocumentDataFromId("users", user.uid);
       expect(newUserData?.pendingSentences).toEqual(1);
 
-      await wrappedDeleteSentence({ sentenceId }, authContext);
+      await deleteSentence(sentenceId, token);
 
-      const newestUserData = await getDocumentDataFromId(
-        "users",
-        authContext.auth.uid
-      );
+      const newestUserData = await getDocumentDataFromId("users", user.uid);
       expect(newestUserData?.pendingSentences).toEqual(0);
     });
 
     test("deleteSentence should decrement word's frequency counter", async () => {
-      const sentenceId = (await mineWords(authContext, [["猫", "ネコ"]]))[0];
+      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
       const sentenceData = await getDocumentDataFromId("sentences", sentenceId);
 
       const oldWordData = await getDocumentDataFromId(
@@ -515,7 +500,7 @@ describe("Function tests", () => {
       );
       expect(oldWordData?.frequency).toEqual(1);
 
-      await wrappedDeleteSentence({ sentenceId }, authContext);
+      await deleteSentence(sentenceId, token);
 
       const newWordData = await getDocumentDataFromId(
         "words",
@@ -525,6 +510,7 @@ describe("Function tests", () => {
       expect(newWordData?.updatedAt > oldWordData?.updatedAt).toBeTruthy();
     });
 
+    /*
     test("getPendingSentences should work", async () => {
       const oldQuery = await wrappedGetPendingSentences({}, authContext);
 

@@ -25,7 +25,7 @@ export const expectErrors = async (
 
 export const expectSuccess = async (
   responsePromise: Promise<unknown>,
-  data: unknown
+  data?: unknown
 ) =>
   await expect(responsePromise).resolves.toEqual({
     success: true,
@@ -133,6 +133,16 @@ export const newBatch = async (sentences: string[], token?: string) => {
     }),
     headers: new Headers({
       "Content-Type": "application/json",
+      Authorization: token ? `Bearer ${token}` : "",
+    }),
+  });
+  return await response.json();
+};
+
+export const deleteSentence = async (sentenceId: string, token?: string) => {
+  const response = await fetch(`${apiUrl}/sentences/${sentenceId}`, {
+    method: "delete",
+    headers: new Headers({
       Authorization: token ? `Bearer ${token}` : "",
     }),
   });

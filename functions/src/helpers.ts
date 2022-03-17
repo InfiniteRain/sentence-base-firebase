@@ -19,7 +19,7 @@ export const validationError = (res: Response, errors: ValidationError[]) => {
 
 export const successResponse = (
   res: Response,
-  data: Record<string, unknown>
+  data?: Record<string, unknown>
 ) => {
   res.send({ success: true, data });
 };
