@@ -6,6 +6,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /users/{docId} {
+      allow read: if request.auth != null
+        && docId == request.auth.uid;
+    }
+
     match /words/{docId} {
       allow read: if request.auth != null
         && resource.data.userUid == request.auth.uid;
