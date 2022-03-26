@@ -11,6 +11,7 @@ export const timestampMatcher = {
   _nanoseconds: expect.any(Number),
   _seconds: expect.any(Number),
 };
+const metaCountersDocumentId = "counters";
 
 export const expectErrors = async (
   responsePromise: Promise<unknown>,
@@ -74,6 +75,46 @@ export const getIdToken = async (uid: string) => {
   const json = await response.json();
 
   return json.idToken;
+};
+
+export const getMetaCounter = async (collection: string): Promise<number> => {
+  const firestore = admin.firestore();
+
+  const document = await firestore
+    .collection("meta")
+    .doc(metaCountersDocumentId)
+    .get();
+
+  return document.data()?.[collection] ?? 0;
+};
+
+export const getUserMetaCounter = async (
+  userUid: string,
+  collection: string
+): Promise<number> => {
+  const firestore = admin.firestore();
+
+  const document = await firestore.collection("users").doc(userUid).get();
+
+  return document.data()?.counters?.[collection] ?? 0;
+};
+
+export const waitForCounterUpdate = async (
+  original: number,
+  collection: string
+): Promise<void> => {
+  const firestore = admin.firestore();
+  return await new Promise<void>((resolve) => {
+    const unsubscribe = firestore
+      .collection("meta")
+      .doc(metaCountersDocumentId)
+      .onSnapshot((snap) => {
+        if (snap.data()?.[collection] !== original) {
+          unsubscribe();
+          resolve();
+        }
+      });
+  });
 };
 
 export const initAuth = async (): Promise<[admin.auth.UserRecord, string]> => {

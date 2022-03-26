@@ -10,6 +10,9 @@ import {
   newBatch,
   deleteSentence,
   getPendingSentences,
+  getMetaCounter,
+  waitForCounterUpdate,
+  getUserMetaCounter,
 } from "./helpers";
 import * as admin from "firebase-admin";
 
@@ -37,14 +40,17 @@ describe("Function tests", () => {
 
   const firestore = admin.firestore();
 
-  const getDocumentFromId = async (collection: string, id: string) =>
+  const getDocumentById = async (collection: string, id: string) =>
     await firestore.collection(collection).doc(id).get();
 
-  const getDocumentDataFromId = async (
+  const deleteDocumentById = async (collection: string, id: string) =>
+    await firestore.collection(collection).doc(id).delete();
+
+  const getDocumentDataById = async (
     collection: string,
     id: string
   ): Promise<FirebaseFirestore.DocumentData | undefined> =>
-    (await getDocumentFromId(collection, id)).data();
+    (await getDocumentById(collection, id)).data();
 
   const getDocumentCount = async (collection: string): Promise<number> => {
     const snap = await firestore.collection(collection).get();
@@ -89,11 +95,26 @@ describe("Function tests", () => {
 
       await expect(getDocumentCount("users")).resolves.toEqual(1);
 
-      const userData = await getDocumentDataFromId("users", user.uid);
+      const userData = await getDocumentDataById("users", user.uid);
 
       expect(userData).toEqual({
         pendingSentences: 0,
       });
+    });
+
+    test("createUserDocument should increment the meta counter", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await expect(getMetaCounter("users")).resolves.toEqual(0);
+
+      await initAuth();
+      await waitForCounterUpdate(0, "users");
+
+      await expect(getMetaCounter("users")).resolves.toEqual(1);
+
+      await initAuth();
+      await waitForCounterUpdate(1, "users");
+
+      await expect(getMetaCounter("users")).resolves.toEqual(2);
     });
 
     test("addSentence should reject", async () => {
@@ -123,6 +144,125 @@ describe("Function tests", () => {
       [user, token] = await initAuth();
     });
 
+    test("meta counters should increment when documents are created", async () => {
+      const userUid = user.uid;
+      const testDictionaryForm = "猫";
+      const testReading = "ネコ";
+      const testSentence = "これは猫です。";
+
+      const sentenceIds = [];
+
+      for (let i = 0; i < 5; i++) {
+        await expect(getMetaCounter("words")).resolves.toEqual(i);
+        await expect(getMetaCounter("sentences")).resolves.toEqual(i);
+        await expect(getUserMetaCounter(userUid, "words")).resolves.toEqual(i);
+        await expect(getUserMetaCounter(userUid, "sentences")).resolves.toEqual(
+          i
+        );
+
+        const result = await addSentence(
+          `${testDictionaryForm}-${i}`,
+          `${testReading}-${i}`,
+          `${testSentence}-${i}`,
+          ["some", "tags"],
+          token
+        );
+
+        await Promise.all([
+          waitForCounterUpdate(i, "words"),
+          waitForCounterUpdate(i, "sentences"),
+        ]);
+        sentenceIds.push(result.data.sentenceId);
+
+        await expect(getMetaCounter("words")).resolves.toEqual(i + 1);
+        await expect(getMetaCounter("sentences")).resolves.toEqual(i + 1);
+        await expect(getUserMetaCounter(userUid, "words")).resolves.toEqual(
+          i + 1
+        );
+        await expect(getUserMetaCounter(userUid, "sentences")).resolves.toEqual(
+          i + 1
+        );
+      }
+
+      await expect(getMetaCounter("batches")).resolves.toEqual(0);
+      await expect(getUserMetaCounter(userUid, "batches")).resolves.toEqual(0);
+
+      await newBatch(sentenceIds, token);
+
+      await waitForCounterUpdate(0, "batches");
+      await expect(getMetaCounter("batches")).resolves.toEqual(1);
+      await expect(getUserMetaCounter(userUid, "batches")).resolves.toEqual(1);
+    });
+
+    test("meta counters should decrement when documents are deleted", async () => {
+      const userUid = user.uid;
+      const testDictionaryForm = "猫";
+      const testReading = "ネコ";
+      const testSentence = "これは猫です。";
+
+      const sentenceIds = [];
+
+      for (let i = 0; i < 5; i++) {
+        const result = await addSentence(
+          `${testDictionaryForm}-${i}`,
+          `${testReading}-${i}`,
+          `${testSentence}-${i}`,
+          ["some", "tags"],
+          token
+        );
+        await Promise.all([
+          waitForCounterUpdate(i, "words"),
+          waitForCounterUpdate(i, "sentences"),
+        ]);
+
+        sentenceIds.push(result.data.sentenceId);
+      }
+
+      const result = await newBatch(sentenceIds, token);
+      await waitForCounterUpdate(0, "batches");
+
+      await expect(getMetaCounter("batches")).resolves.toEqual(1);
+      await expect(getUserMetaCounter(userUid, "batches")).resolves.toEqual(1);
+
+      await deleteDocumentById("batches", result.data.batchId);
+      await waitForCounterUpdate(1, "batches");
+
+      await expect(getMetaCounter("batches")).resolves.toEqual(0);
+      await expect(getUserMetaCounter(userUid, "batches")).resolves.toEqual(0);
+
+      for (let i = 4; i >= 0; i--) {
+        const sentenceId = sentenceIds[i];
+        const wordId = (await getDocumentDataById("sentences", sentenceId))
+          ?.wordId;
+
+        await expect(getMetaCounter("words")).resolves.toEqual(i + 1);
+        await expect(getMetaCounter("sentences")).resolves.toEqual(i + 1);
+        await expect(getUserMetaCounter(userUid, "words")).resolves.toEqual(
+          i + 1
+        );
+        await expect(getUserMetaCounter(userUid, "sentences")).resolves.toEqual(
+          i + 1
+        );
+
+        await Promise.all([
+          waitForCounterUpdate(i + 1, "words"),
+          deleteDocumentById("words", wordId),
+        ]);
+
+        await Promise.all([
+          deleteDocumentById("sentences", sentenceId),
+          waitForCounterUpdate(i + 1, "sentences"),
+        ]);
+
+        await expect(getMetaCounter("words")).resolves.toEqual(i);
+        await expect(getMetaCounter("sentences")).resolves.toEqual(i);
+        await expect(getUserMetaCounter(userUid, "words")).resolves.toEqual(i);
+        await expect(getUserMetaCounter(userUid, "sentences")).resolves.toEqual(
+          i
+        );
+      }
+    });
+
     test("addSentence should validate", async () => {
       await expectErrors(addSentence("", "", "", [], token));
     });
@@ -140,7 +280,7 @@ describe("Function tests", () => {
         token
       );
 
-      const sentenceSnapData = await getDocumentDataFromId(
+      const sentenceSnapData = await getDocumentDataById(
         "sentences",
         result.data.sentenceId
       );
@@ -156,7 +296,7 @@ describe("Function tests", () => {
         updatedAt: timestampMatcher,
       });
 
-      const wordSnapData = await getDocumentDataFromId(
+      const wordSnapData = await getDocumentDataById(
         "words",
         sentenceSnapData?.wordId
       );
@@ -188,7 +328,7 @@ describe("Function tests", () => {
           token
         );
 
-        const sentenceSnapData = await getDocumentDataFromId(
+        const sentenceSnapData = await getDocumentDataById(
           "sentences",
           result.data.sentenceId
         );
@@ -208,7 +348,7 @@ describe("Function tests", () => {
         });
       }
 
-      const wordSnapData = await getDocumentDataFromId("words", wordId ?? "");
+      const wordSnapData = await getDocumentDataById("words", wordId ?? "");
 
       expect(wordSnapData).toEqual({
         userUid: user.uid,
@@ -232,14 +372,14 @@ describe("Function tests", () => {
 
     test("addSentence should not add more sentences after the limit has been reached", async () => {
       const maximumPendingSentences = 15;
-      const oldUserData = await getDocumentDataFromId("users", user.uid);
+      const oldUserData = await getDocumentDataById("users", user.uid);
       expect(oldUserData?.pendingSentences).toEqual(0);
 
       for (let i = 0; i < maximumPendingSentences; i++) {
         await addSentence("猫", "ネコ", `${i}匹目の猫が現れる`, [], token);
       }
 
-      const newUserData = await getDocumentDataFromId("users", user.uid);
+      const newUserData = await getDocumentDataById("users", user.uid);
 
       expect(newUserData?.pendingSentences).toEqual(maximumPendingSentences);
       await expect(getDocumentCount("sentences")).resolves.toEqual(
@@ -264,12 +404,12 @@ describe("Function tests", () => {
 
     test("addSentence should set isMined to false after the word has been mined again", async () => {
       const sentenceIds = await mineTestWords(token);
-      const sentenceData = await getDocumentDataFromId(
+      const sentenceData = await getDocumentDataById(
         "sentences",
         sentenceIds[0]
       );
 
-      const oldWordData = await getDocumentDataFromId(
+      const oldWordData = await getDocumentDataById(
         "words",
         sentenceData?.wordId
       );
@@ -277,7 +417,7 @@ describe("Function tests", () => {
 
       await newBatch(sentenceIds, token);
 
-      const newWordData = await getDocumentDataFromId(
+      const newWordData = await getDocumentDataById(
         "words",
         sentenceData?.wordId
       );
@@ -291,7 +431,7 @@ describe("Function tests", () => {
         token
       );
 
-      const newestWordData = await getDocumentDataFromId(
+      const newestWordData = await getDocumentDataById(
         "words",
         sentenceData?.wordId
       );
@@ -335,7 +475,7 @@ describe("Function tests", () => {
 
       expect(result.data.batchId).toEqual(expect.any(String));
 
-      const batchData = await getDocumentDataFromId(
+      const batchData = await getDocumentDataById(
         "batches",
         result.data.batchId
       );
@@ -367,15 +507,12 @@ describe("Function tests", () => {
       );
 
       for (const sentenceId of [...sentenceIdsToMine, ...sentenceIdsToIgnore]) {
-        const sentenceData = await getDocumentDataFromId(
-          "sentences",
-          sentenceId
-        );
+        const sentenceData = await getDocumentDataById("sentences", sentenceId);
 
         expect(sentenceData?.isMined).toEqual(false);
         expect(sentenceData?.isPending).toEqual(true);
 
-        const wordData = await getDocumentDataFromId(
+        const wordData = await getDocumentDataById(
           "words",
           sentenceData?.wordId
         );
@@ -388,15 +525,12 @@ describe("Function tests", () => {
       for (const sentenceId of [...sentenceIdsToMine, ...sentenceIdsToIgnore]) {
         const isIgnored = sentenceIdsToIgnore.includes(sentenceId);
 
-        const sentenceData = await getDocumentDataFromId(
-          "sentences",
-          sentenceId
-        );
+        const sentenceData = await getDocumentDataById("sentences", sentenceId);
 
         expect(sentenceData?.isMined).toEqual(isIgnored ? false : true);
         expect(sentenceData?.isPending).toEqual(false);
 
-        const wordData = await getDocumentDataFromId(
+        const wordData = await getDocumentDataById(
           "words",
           sentenceData?.wordId
         );
@@ -416,17 +550,17 @@ describe("Function tests", () => {
     });
 
     test("newBatch should reset the user's pendingSentences counter", async () => {
-      const oldUserData = await getDocumentDataFromId("users", user.uid);
+      const oldUserData = await getDocumentDataById("users", user.uid);
       expect(oldUserData?.pendingSentences).toEqual(0);
 
       const sentenceIds = await mineTestWords(token);
 
-      const newUserData = await getDocumentDataFromId("users", user.uid);
+      const newUserData = await getDocumentDataById("users", user.uid);
       expect(newUserData?.pendingSentences).toEqual(10);
 
       await newBatch(sentenceIds, token);
 
-      const newestUserData = await getDocumentDataFromId("users", user.uid);
+      const newestUserData = await getDocumentDataById("users", user.uid);
       expect(newestUserData?.pendingSentences).toEqual(0);
     });
 
@@ -460,41 +594,35 @@ describe("Function tests", () => {
     test("deleteSentence should result with the sentence being deleted", async () => {
       const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
 
-      const oldSentenceDocSnap = await getDocumentFromId(
-        "sentences",
-        sentenceId
-      );
+      const oldSentenceDocSnap = await getDocumentById("sentences", sentenceId);
       expect(oldSentenceDocSnap.exists).toBeTruthy();
 
       await expectSuccess(deleteSentence(sentenceId, token));
 
-      const newSentenceDocSnap = await getDocumentFromId(
-        "sentences",
-        sentenceId
-      );
+      const newSentenceDocSnap = await getDocumentById("sentences", sentenceId);
       expect(newSentenceDocSnap.exists).toBeFalsy();
     });
 
     test("deleteSentence should decrement user's pendingSentence counter", async () => {
-      const oldUserData = await getDocumentDataFromId("users", user.uid);
+      const oldUserData = await getDocumentDataById("users", user.uid);
       expect(oldUserData?.pendingSentences).toEqual(0);
 
       const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
 
-      const newUserData = await getDocumentDataFromId("users", user.uid);
+      const newUserData = await getDocumentDataById("users", user.uid);
       expect(newUserData?.pendingSentences).toEqual(1);
 
       await deleteSentence(sentenceId, token);
 
-      const newestUserData = await getDocumentDataFromId("users", user.uid);
+      const newestUserData = await getDocumentDataById("users", user.uid);
       expect(newestUserData?.pendingSentences).toEqual(0);
     });
 
     test("deleteSentence should decrement word's frequency counter", async () => {
       const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
-      const sentenceData = await getDocumentDataFromId("sentences", sentenceId);
+      const sentenceData = await getDocumentDataById("sentences", sentenceId);
 
-      const oldWordData = await getDocumentDataFromId(
+      const oldWordData = await getDocumentDataById(
         "words",
         sentenceData?.wordId
       );
@@ -502,7 +630,7 @@ describe("Function tests", () => {
 
       await deleteSentence(sentenceId, token);
 
-      const newWordData = await getDocumentDataFromId(
+      const newWordData = await getDocumentDataById(
         "words",
         sentenceData?.wordId
       );

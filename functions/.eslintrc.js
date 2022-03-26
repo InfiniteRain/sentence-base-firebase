@@ -24,6 +24,7 @@ module.exports = {
   rules: {
     quotes: ["error", "double"],
     "import/no-unresolved": 0,
+    "valid-jsdoc": 0,
     "@typescript-eslint/no-unused-vars": [
       "error",
       {
