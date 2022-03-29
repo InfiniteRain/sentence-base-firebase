@@ -155,41 +155,95 @@ sentencesRouter
     }
   );
 
-sentencesRouter.route("/:sentenceId").delete(async (req, res) => {
-  if (!req.user) {
-    authenticationError(res);
-    return;
-  }
+sentencesRouter
+  .route("/:sentenceId")
+  .delete(async (req, res) => {
+    if (!req.user) {
+      authenticationError(res);
+      return;
+    }
 
-  const firestore = admin.firestore();
-  const sentencesCollection = firestore.collection("sentences");
-  const usersCollection = firestore.collection("users");
-  const wordsCollection = firestore.collection("words");
-  const serverTimestamp = admin.firestore.FieldValue.serverTimestamp();
+    const firestore = admin.firestore();
+    const sentencesCollection = firestore.collection("sentences");
+    const usersCollection = firestore.collection("users");
+    const wordsCollection = firestore.collection("words");
+    const serverTimestamp = admin.firestore.FieldValue.serverTimestamp();
 
-  const sentenceSnapshot = await sentencesCollection
-    .where(admin.firestore.FieldPath.documentId(), "==", req.params.sentenceId)
-    .where("userUid", "==", req.user.uid)
-    .where("isPending", "==", true)
-    .limit(1)
-    .get();
+    const sentenceSnapshot = await sentencesCollection
+      .where(
+        admin.firestore.FieldPath.documentId(),
+        "==",
+        req.params.sentenceId
+      )
+      .where("userUid", "==", req.user.uid)
+      .where("isPending", "==", true)
+      .limit(1)
+      .get();
 
-  if (sentenceSnapshot.empty) {
-    errorResponse(res, 400, ["Invalid sentence ID provided."]);
-    return;
-  }
+    if (sentenceSnapshot.empty) {
+      errorResponse(res, 400, ["Invalid sentence ID provided."]);
+      return;
+    }
 
-  const sentenceSnap = sentenceSnapshot.docs[0];
-  const wordId = sentenceSnap.data().wordId;
+    const sentenceSnap = sentenceSnapshot.docs[0];
+    const wordId = sentenceSnap.data().wordId;
 
-  await sentenceSnap.ref.delete();
-  await usersCollection.doc(req.user.uid).update({
-    pendingSentences: admin.firestore.FieldValue.increment(-1),
-  });
-  await wordsCollection.doc(wordId).update({
-    frequency: admin.firestore.FieldValue.increment(-1),
-    updatedAt: serverTimestamp,
-  });
+    await sentenceSnap.ref.delete();
+    await usersCollection.doc(req.user.uid).update({
+      pendingSentences: admin.firestore.FieldValue.increment(-1),
+    });
+    await wordsCollection.doc(wordId).update({
+      frequency: admin.firestore.FieldValue.increment(-1),
+      updatedAt: serverTimestamp,
+    });
 
-  successResponse(res);
-});
+    successResponse(res);
+  })
+  .post(
+    body(
+      "sentence",
+      "Field `sentence` must be a string with a length between 1 and 512."
+    )
+      .isString()
+      .isLength({ min: 1, max: 512 }),
+    body("tags", "Field `tags` must be an array of strings.")
+      .isArray()
+      .custom((array) =>
+        (array ?? []).every((element: unknown) => typeof element === "string")
+      ),
+    async (req, res) => {
+      if (!req.user) {
+        authenticationError(res);
+        return;
+      }
+
+      const firestore = admin.firestore();
+      const sentencesCollection = firestore.collection("sentences");
+      const serverTimestamp = admin.firestore.FieldValue.serverTimestamp();
+
+      const sentenceSnapshot = await sentencesCollection
+        .where(
+          admin.firestore.FieldPath.documentId(),
+          "==",
+          req.params.sentenceId
+        )
+        .where("userUid", "==", req.user.uid)
+        .where("isPending", "==", true)
+        .limit(1)
+        .get();
+
+      const { sentence, tags } = req.body;
+      if (sentenceSnapshot.empty) {
+        errorResponse(res, 400, ["Invalid sentence ID provided."]);
+        return;
+      }
+
+      await sentenceSnapshot.docs[0].ref.update({
+        sentence,
+        tags,
+        updatedAt: serverTimestamp,
+      });
+
+      successResponse(res);
+    }
+  );
