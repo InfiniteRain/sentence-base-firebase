@@ -729,7 +729,7 @@ describe("Function tests", () => {
       ]);
     });
 
-    test("editSentence should result with the sentence being deleted", async () => {
+    test("editSentence should result with the sentence being edited and deduplicate tags", async () => {
       const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
 
       const oldSentenceDocSnap = await getDocumentById("sentences", sentenceId);
@@ -746,7 +746,12 @@ describe("Function tests", () => {
       });
 
       await expectSuccess(
-        editSentence(sentenceId, "new sentence", ["new", "tags"], token)
+        editSentence(
+          sentenceId,
+          "new sentence",
+          ["new", "new", "tags", "tags"],
+          token
+        )
       );
 
       const newSentenceDocSnap = await getDocumentById("sentences", sentenceId);
