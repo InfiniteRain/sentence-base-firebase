@@ -487,7 +487,7 @@ describe("Function tests", () => {
 
     test("newBatch should not work with non-owned sentences", async () => {
       const [_user2, token2] = await initAuth();
-      const sentenceId = (await mineWords([["猫", "ネコ"]], token2))[0];
+      const [sentenceId] = await mineWords([["猫", "ネコ"]], token2);
 
       await expectErrors(newBatch([sentenceId], token), [
         "Invalid sentence IDs provided.",
@@ -495,7 +495,7 @@ describe("Function tests", () => {
     });
 
     test("newBatch should not work with non-pending sentences", async () => {
-      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
+      const [sentenceId] = await mineWords([["猫", "ネコ"]], token);
 
       await firestore.collection("sentences").doc(sentenceId).update({
         isPending: false,
@@ -609,7 +609,7 @@ describe("Function tests", () => {
 
     test("deleteSentence should not work with non-owned sentences", async () => {
       const [_user2, token2] = await initAuth();
-      const sentenceId = (await mineWords([["猫", "ネコ"]], token2))[0];
+      const [sentenceId] = await mineWords([["猫", "ネコ"]], token2);
 
       await expectErrors(deleteSentence(sentenceId, token), [
         "Invalid sentence ID provided.",
@@ -617,7 +617,7 @@ describe("Function tests", () => {
     });
 
     test("deleteSentence should not work with non-pending sentences", async () => {
-      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
+      const [sentenceId] = await mineWords([["猫", "ネコ"]], token);
 
       await firestore.collection("sentences").doc(sentenceId).update({
         isPending: false,
@@ -629,7 +629,7 @@ describe("Function tests", () => {
     });
 
     test("deleteSentence should result with the sentence being deleted", async () => {
-      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
+      const [sentenceId] = await mineWords([["猫", "ネコ"]], token);
 
       const oldSentenceDocSnap = await getDocumentById("sentences", sentenceId);
       expect(oldSentenceDocSnap.exists).toBeTruthy();
@@ -644,7 +644,7 @@ describe("Function tests", () => {
       const oldUserData = await getDocumentDataById("users", user.uid);
       expect(oldUserData?.pendingSentences).toEqual(0);
 
-      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
+      const [sentenceId] = await mineWords([["猫", "ネコ"]], token);
 
       const newUserData = await getDocumentDataById("users", user.uid);
       expect(newUserData?.pendingSentences).toEqual(1);
@@ -656,7 +656,7 @@ describe("Function tests", () => {
     });
 
     test("deleteSentence should decrement word's frequency counter", async () => {
-      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
+      const [sentenceId] = await mineWords([["猫", "ネコ"]], token);
       const sentenceData = await getDocumentDataById("sentences", sentenceId);
 
       const oldWordData = await getDocumentDataById(
@@ -710,7 +710,7 @@ describe("Function tests", () => {
 
     test("editSentence should not work with non-owned sentences", async () => {
       const [_user2, token2] = await initAuth();
-      const sentenceId = (await mineWords([["猫", "ネコ"]], token2))[0];
+      const [sentenceId] = await mineWords([["猫", "ネコ"]], token2);
 
       await expectErrors(editSentence(sentenceId, "xxx", [], token), [
         "Invalid sentence ID provided.",
@@ -718,7 +718,7 @@ describe("Function tests", () => {
     });
 
     test("editSentence should not work with non-pending sentences", async () => {
-      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
+      const [sentenceId] = await mineWords([["猫", "ネコ"]], token);
 
       await firestore.collection("sentences").doc(sentenceId).update({
         isPending: false,
@@ -730,7 +730,7 @@ describe("Function tests", () => {
     });
 
     test("editSentence should result with the sentence being edited and deduplicate tags", async () => {
-      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
+      const [sentenceId] = await mineWords([["猫", "ネコ"]], token);
 
       const oldSentenceDocSnap = await getDocumentById("sentences", sentenceId);
       const oldData = oldSentenceDocSnap.data();
