@@ -240,7 +240,7 @@ sentencesRouter
 
       await sentenceSnapshot.docs[0].ref.update({
         sentence,
-        tags,
+        tags: [...new Set(tags)],
         updatedAt: serverTimestamp,
       });
 
