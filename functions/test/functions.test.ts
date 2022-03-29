@@ -319,6 +319,36 @@ describe("Function tests", () => {
       });
     });
 
+    test("addSentence should deduplicate tags", async () => {
+      const testDictionaryForm = "猫";
+      const testReading = "ネコ";
+      const testSentence = "これは猫です。";
+
+      const result = await addSentence(
+        testDictionaryForm,
+        testReading,
+        testSentence,
+        ["some", "some", "tags", "tags"],
+        token
+      );
+
+      const sentenceSnapData = await getDocumentDataById(
+        "sentences",
+        result.data.sentenceId
+      );
+
+      expect(sentenceSnapData).toEqual({
+        userUid: user.uid,
+        wordId: expect.any(String),
+        sentence: testSentence,
+        isPending: true,
+        isMined: false,
+        tags: ["some", "tags"],
+        createdAt: timestampMatcher,
+        updatedAt: timestampMatcher,
+      });
+    });
+
     test("addSentence should increase frequency on duplicate word instead of adding a new word", async () => {
       const testDictionaryForm = "猫";
       const testReading = "ネコ";

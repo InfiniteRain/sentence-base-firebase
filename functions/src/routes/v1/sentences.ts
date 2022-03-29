@@ -142,7 +142,7 @@ sentencesRouter
         sentence,
         isPending: true,
         isMined: false,
-        tags,
+        tags: [...new Set(tags)],
         createdAt: serverTimestamp,
         updatedAt: serverTimestamp,
       });
