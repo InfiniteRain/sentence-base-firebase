@@ -188,6 +188,26 @@ export const deleteSentence = async (sentenceId: string, token?: string) => {
   return await response.json();
 };
 
+export const editSentence = async (
+  sentenceId: string,
+  sentence: string,
+  tags: string[],
+  token?: string
+) => {
+  const response = await fetch(`${apiUrl}/sentences/${sentenceId}`, {
+    method: "post",
+    body: JSON.stringify({
+      sentence,
+      tags,
+    }),
+    headers: new Headers({
+      "Content-Type": "application/json",
+      Authorization: token ? `Bearer ${token}` : "",
+    }),
+  });
+  return await response.json();
+};
+
 export const getPendingSentences = async (token?: string) => {
   const response = await fetch(`${apiUrl}/sentences`, {
     headers: new Headers({

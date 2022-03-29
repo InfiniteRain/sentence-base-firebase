@@ -13,6 +13,7 @@ import {
   getMetaCounter,
   waitForCounterUpdate,
   getUserMetaCounter,
+  editSentence,
 } from "./helpers";
 import * as admin from "firebase-admin";
 
@@ -129,6 +130,12 @@ describe("Function tests", () => {
 
     test("deleteSentence should reject", async () => {
       await expectErrors(deleteSentence("xxx"), ["Not logged in."]);
+    });
+
+    test("editSentence should reject", async () => {
+      await expectErrors(editSentence("xxx", "これは猫です。", []), [
+        "Not logged in.",
+      ]);
     });
 
     test("getPendingSentences should reject", async () => {
@@ -663,6 +670,68 @@ describe("Function tests", () => {
       const newestQuery = await getPendingSentences(token);
 
       expect(newestQuery.data.sentences.length).toEqual(0);
+    });
+
+    test("editSentence should not work with non-existent sentences", async () => {
+      await expectErrors(editSentence("wrongId", "xxx", [], token), [
+        "Invalid sentence ID provided.",
+      ]);
+    });
+
+    test("editSentence should not work with non-owned sentences", async () => {
+      const [_user2, token2] = await initAuth();
+      const sentenceId = (await mineWords([["猫", "ネコ"]], token2))[0];
+
+      await expectErrors(editSentence(sentenceId, "xxx", [], token), [
+        "Invalid sentence ID provided.",
+      ]);
+    });
+
+    test("editSentence should not work with non-pending sentences", async () => {
+      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
+
+      await firestore.collection("sentences").doc(sentenceId).update({
+        isPending: false,
+      });
+
+      await expectErrors(editSentence(sentenceId, "xxx", [], token), [
+        "Invalid sentence ID provided.",
+      ]);
+    });
+
+    test("editSentence should result with the sentence being deleted", async () => {
+      const sentenceId = (await mineWords([["猫", "ネコ"]], token))[0];
+
+      const oldSentenceDocSnap = await getDocumentById("sentences", sentenceId);
+      const oldData = oldSentenceDocSnap.data();
+      expect(oldData).toEqual({
+        sentence: "猫の文",
+        wordId: expect.any(String),
+        isPending: true,
+        tags: ["some", "tags"],
+        isMined: false,
+        userUid: expect.any(String),
+        createdAt: timestampMatcher,
+        updatedAt: timestampMatcher,
+      });
+
+      await expectSuccess(
+        editSentence(sentenceId, "new sentence", ["new", "tags"], token)
+      );
+
+      const newSentenceDocSnap = await getDocumentById("sentences", sentenceId);
+      const newData = newSentenceDocSnap.data();
+      expect(newData).toEqual({
+        sentence: "new sentence",
+        wordId: expect.any(String),
+        isPending: true,
+        tags: ["new", "tags"],
+        isMined: false,
+        userUid: expect.any(String),
+        createdAt: timestampMatcher,
+        updatedAt: timestampMatcher,
+      });
+      expect(newData?.updatedAt > oldData?.updatedAt).toBeTruthy();
     });
   });
 });
