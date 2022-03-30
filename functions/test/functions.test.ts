@@ -349,6 +349,51 @@ describe("Function tests", () => {
       });
     });
 
+    test("addSentence should trim fields", async () => {
+      const testDictionaryForm = "猫";
+      const testReading = "ネコ";
+      const testSentence = "これは猫です。";
+
+      const result = await addSentence(
+        ` ${testDictionaryForm} `,
+        ` ${testReading} `,
+        ` ${testSentence} `,
+        ["some", "tags"],
+        token
+      );
+
+      const sentenceSnapData = await getDocumentDataById(
+        "sentences",
+        result.data.sentenceId
+      );
+
+      expect(sentenceSnapData).toEqual({
+        userUid: user.uid,
+        wordId: expect.any(String),
+        sentence: testSentence,
+        isPending: true,
+        isMined: false,
+        tags: ["some", "tags"],
+        createdAt: timestampMatcher,
+        updatedAt: timestampMatcher,
+      });
+
+      const wordSnapData = await getDocumentDataById(
+        "words",
+        sentenceSnapData?.wordId
+      );
+
+      expect(wordSnapData).toEqual({
+        userUid: user.uid,
+        dictionaryForm: testDictionaryForm,
+        reading: testReading,
+        frequency: 1,
+        isMined: false,
+        createdAt: timestampMatcher,
+        updatedAt: timestampMatcher,
+      });
+    });
+
     test("addSentence should increase frequency on duplicate word instead of adding a new word", async () => {
       const testDictionaryForm = "猫";
       const testReading = "ネコ";
@@ -729,7 +774,7 @@ describe("Function tests", () => {
       ]);
     });
 
-    test("editSentence should result with the sentence being edited and deduplicate tags", async () => {
+    test("editSentence should result with the sentence being edited, tags deduplicated and fields trimmed", async () => {
       const [sentenceId] = await mineWords([["猫", "ネコ"]], token);
 
       const oldSentenceDocSnap = await getDocumentById("sentences", sentenceId);
@@ -748,7 +793,7 @@ describe("Function tests", () => {
       await expectSuccess(
         editSentence(
           sentenceId,
-          "new sentence",
+          " new sentence  ",
           ["new", "new", "tags", "tags"],
           token
         )

@@ -94,7 +94,11 @@ sentencesRouter
         return;
       }
 
-      const { dictionaryForm, reading, sentence, tags } = req.body;
+      const dictionaryForm = req.body.dictionaryForm.trim();
+      const reading = req.body.reading.trim();
+      const sentence = req.body.sentence.trim();
+      const { tags } = req.body;
+
       const firestore = admin.firestore();
       const wordsCollection = firestore.collection("words");
       const sentencesCollection = firestore.collection("sentences");
@@ -232,7 +236,9 @@ sentencesRouter
         .limit(1)
         .get();
 
-      const { sentence, tags } = req.body;
+      const sentence = req.body.sentence.trim();
+      const { tags } = req.body;
+
       if (sentenceSnapshot.empty) {
         errorResponse(res, 400, ["Invalid sentence ID provided."]);
         return;
