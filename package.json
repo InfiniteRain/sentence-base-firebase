@@ -1,0 +1,13 @@
+{
+  "name": "sentence-base-firebase",
+  "version": "1.0.0",
+  "scripts": {
+    "test:functions": "cd functions && yarn test",
+    "test": "yarn test:functions",
+    "deploy:dev": "firebase deploy --project sentence-base-dev",
+    "deploy:prod": "firebase deploy --project sentence-base"
+  },
+  "devDependencies": {
+    "firebase-tools": "^11.3.0"
+  }
+}
