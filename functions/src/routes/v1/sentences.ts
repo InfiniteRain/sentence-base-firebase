@@ -4,7 +4,7 @@ import {
   errorResponse,
   successResponse,
   validationError,
-} from "../../helpers";
+} from "./shared";
 import { body, validationResult } from "express-validator";
 import * as admin from "firebase-admin";
 import { config } from "../../config";
