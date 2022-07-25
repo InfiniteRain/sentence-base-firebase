@@ -7,9 +7,9 @@ export const createBatch = async (
   const {
     failureAction,
     successAction,
-    documentId,
+    fieldPathDocumentId,
     firestore,
-    serverTimestamp,
+    fieldValueServerTimestamp,
     sentencesCollection,
     wordsCollection,
     batchesCollection,
@@ -19,7 +19,7 @@ export const createBatch = async (
   const sentenceIdSet = new Set<string>(sentenceIds);
   const mutatedSentenceIds = new Set<string>();
   const sentences = [];
-  const currentTimestamp = serverTimestamp();
+  const currentTimestamp = fieldValueServerTimestamp();
   const updateBatch = firestore.batch();
   const pendingSentenceSnapshot = await sentencesCollection
     .where("userUid", "==", userUid)
@@ -39,7 +39,7 @@ export const createBatch = async (
     mutatedSentenceIds.add(sentenceDocumentSnap.id);
 
     const wordSnapshot = await wordsCollection
-      .where(documentId(), "==", sentenceDocumentSnap.data().wordId)
+      .where(fieldPathDocumentId(), "==", sentenceDocumentSnap.data().wordId)
       .where("userUid", "==", userUid)
       .limit(1)
       .get();

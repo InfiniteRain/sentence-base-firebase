@@ -11,7 +11,7 @@ export type ActionSuccess<T> = {
   data: T;
 };
 
-export type ActionResult<T> = ActionFailure | ActionSuccess<T>;
+export type ActionResult<T = undefined> = ActionFailure | ActionSuccess<T>;
 
 export const failureAction = (
   code: number,
@@ -32,5 +32,7 @@ export const sentencesCollection = firestore.collection("sentences");
 export const wordsCollection = firestore.collection("words");
 export const batchesCollection = firestore.collection("batches");
 export const usersCollection = firestore.collection("users");
-export const serverTimestamp = admin.firestore.FieldValue.serverTimestamp;
-export const documentId = admin.firestore.FieldPath.documentId;
+export const fieldValueServerTimestamp =
+  admin.firestore.FieldValue.serverTimestamp;
+export const fieldValueIncrement = admin.firestore.FieldValue.increment;
+export const fieldPathDocumentId = admin.firestore.FieldPath.documentId;
