@@ -3,9 +3,9 @@ import fetch, { Headers } from "node-fetch";
 import { nanoid } from "nanoid/non-secure";
 import * as admin from "firebase-admin";
 
-export const apiUrl = `http://localhost:${firebaseJson.emulators.functions.port}/sentence-base/us-central1/api/v1`;
+export const apiUrl = `http://localhost:${firebaseJson.emulators.functions.port}/sentence-base-dev/us-central1/api/v1`;
 export const authUrl = `http://localhost:${firebaseJson.emulators.auth.port}/www.googleapis.com/identitytoolkit/v3/relyingparty/verifyCustomToken?key=${process.env.API_KEY}`;
-export const projectId = "sentence-base";
+export const projectId = "sentence-base-dev";
 export const testUserId = "testUser";
 export const timestampMatcher = {
   _nanoseconds: expect.any(Number),
@@ -109,7 +109,8 @@ export const waitForCounterUpdate = async (
       .collection("meta")
       .doc(metaCountersDocumentId)
       .onSnapshot((snap) => {
-        if (snap.data()?.[collection] !== original) {
+        const currentCounter = snap.data()?.[collection];
+        if (currentCounter !== undefined && currentCounter !== original) {
           unsubscribe();
           resolve();
         }
