@@ -1,4 +1,4 @@
-import { ActionError, ActionResult } from "./shared";
+import type { ActionResult } from "./shared";
 
 export const createBatch = async (
   userUid: string,
@@ -13,6 +13,7 @@ export const createBatch = async (
     fieldPathDocumentId,
     fieldValueServerTimestamp,
     wrapTransaction,
+    ActionError,
   } = await import("./shared");
 
   return await wrapTransaction(

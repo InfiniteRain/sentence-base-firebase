@@ -59,67 +59,74 @@ export const addSentence = async (
   tags: string[]
 ): Promise<ActionResult<string>> => {
   const {
+    firestore,
     wordsCollection,
     sentencesCollection,
     usersCollection,
     fieldValueServerTimestamp,
     fieldValueIncrement,
-    failureAction,
-    successAction,
+    wrapTransaction,
+    ActionError,
   } = await import("./shared");
   const { config } = await import("../config");
 
-  const userSnap = await usersCollection.doc(userUid).get();
+  return await wrapTransaction(
+    firestore.runTransaction(async (transaction) => {
+      const userSnap = await transaction.get(usersCollection.doc(userUid));
 
-  if (userSnap.data()?.pendingSentences >= config.maximumPendingSentences) {
-    return failureAction(429, ["Pending sentences limit reached."]);
-  }
+      if (userSnap.data()?.pendingSentences >= config.maximumPendingSentences) {
+        return Promise.reject(
+          new ActionError(429, "Pending sentences limit reached.")
+        );
+      }
 
-  const currentTimestamp = fieldValueServerTimestamp();
-  const existingWordRef = await wordsCollection
-    .where("userUid", "==", userUid)
-    .where("dictionaryForm", "==", dictionaryForm)
-    .where("reading", "==", reading)
-    .get();
-  const wordExists = existingWordRef.docs.length !== 0;
+      const currentTimestamp = fieldValueServerTimestamp();
+      const existingWordRef = await transaction.get(
+        wordsCollection
+          .where("userUid", "==", userUid)
+          .where("dictionaryForm", "==", dictionaryForm)
+          .where("reading", "==", reading)
+      );
+      const wordExists = existingWordRef.docs.length !== 0;
+      const wordRef = wordExists
+        ? existingWordRef.docs[0].ref
+        : wordsCollection.doc();
 
-  const wordRef = wordExists
-    ? existingWordRef.docs[0]
-    : await wordsCollection.add({
+      wordExists
+        ? transaction.update(wordRef, {
+            frequency: fieldValueIncrement(1),
+            isMined: false,
+            updatedAt: currentTimestamp,
+          })
+        : transaction.create(wordRef, {
+            userUid: userUid,
+            dictionaryForm,
+            reading,
+            frequency: 1,
+            isMined: false,
+            createdAt: currentTimestamp,
+            updatedAt: currentTimestamp,
+          });
+
+      const sentenceRef = sentencesCollection.doc();
+      transaction.create(sentenceRef, {
         userUid: userUid,
-        dictionaryForm,
-        reading,
-        frequency: 1,
+        wordId: wordRef.id,
+        sentence,
+        isPending: true,
         isMined: false,
+        tags: [...new Set(tags)],
         createdAt: currentTimestamp,
         updatedAt: currentTimestamp,
       });
 
-  if (wordExists) {
-    const snap = existingWordRef.docs[0];
-    snap.ref.update({
-      frequency: fieldValueIncrement(1),
-      isMined: false,
-      updatedAt: currentTimestamp,
-    });
-  }
+      transaction.update(userSnap.ref, {
+        pendingSentences: fieldValueIncrement(1),
+      });
 
-  const sentenceRef = await sentencesCollection.add({
-    userUid: userUid,
-    wordId: wordRef.id,
-    sentence,
-    isPending: true,
-    isMined: false,
-    tags: [...new Set(tags)],
-    createdAt: currentTimestamp,
-    updatedAt: currentTimestamp,
-  });
-
-  await userSnap.ref.update({
-    pendingSentences: fieldValueIncrement(1),
-  });
-
-  return successAction(sentenceRef.id);
+      return sentenceRef.id;
+    })
+  );
 };
 
 export const deleteSentence = async (
@@ -127,42 +134,50 @@ export const deleteSentence = async (
   sentenceId: string
 ): Promise<ActionResult> => {
   const {
+    firestore,
     wordsCollection,
     sentencesCollection,
     usersCollection,
     fieldValueServerTimestamp,
     fieldValueIncrement,
     fieldPathDocumentId,
-    failureAction,
-    successAction,
+    wrapTransaction,
+    ActionError,
   } = await import("./shared");
 
-  const currentTimestamp = fieldValueServerTimestamp();
+  return await wrapTransaction(
+    firestore.runTransaction(async (transaction) => {
+      const currentTimestamp = fieldValueServerTimestamp();
 
-  const sentenceSnapshot = await sentencesCollection
-    .where(fieldPathDocumentId(), "==", sentenceId)
-    .where("userUid", "==", userUid)
-    .where("isPending", "==", true)
-    .limit(1)
-    .get();
+      const sentenceSnapshot = await transaction.get(
+        sentencesCollection
+          .where(fieldPathDocumentId(), "==", sentenceId)
+          .where("userUid", "==", userUid)
+          .where("isPending", "==", true)
+          .limit(1)
+      );
 
-  if (sentenceSnapshot.empty) {
-    return failureAction(400, ["Invalid sentence ID provided."]);
-  }
+      if (sentenceSnapshot.empty) {
+        return Promise.reject(
+          new ActionError(400, "Invalid sentence ID provided.")
+        );
+      }
 
-  const sentenceSnap = sentenceSnapshot.docs[0];
-  const wordId = sentenceSnap.data().wordId;
+      const sentenceSnap = sentenceSnapshot.docs[0];
+      const wordId = sentenceSnap.data().wordId;
 
-  await sentenceSnap.ref.delete();
-  await usersCollection.doc(userUid).update({
-    pendingSentences: fieldValueIncrement(-1),
-  });
-  await wordsCollection.doc(wordId).update({
-    frequency: fieldValueIncrement(-1),
-    updatedAt: currentTimestamp,
-  });
+      transaction.delete(sentenceSnap.ref);
+      transaction.update(usersCollection.doc(userUid), {
+        pendingSentences: fieldValueIncrement(-1),
+      });
+      transaction.update(wordsCollection.doc(wordId), {
+        frequency: fieldValueIncrement(-1),
+        updatedAt: currentTimestamp,
+      });
 
-  return successAction(void 0);
+      return void 0;
+    })
+  );
 };
 
 export const editSentence = async (
@@ -172,29 +187,37 @@ export const editSentence = async (
   tags: string[]
 ): Promise<ActionResult> => {
   const {
+    firestore,
     sentencesCollection,
     fieldValueServerTimestamp,
     fieldPathDocumentId,
-    failureAction,
-    successAction,
+    wrapTransaction,
+    ActionError,
   } = await import("./shared");
 
-  const sentenceSnapshot = await sentencesCollection
-    .where(fieldPathDocumentId(), "==", sentenceId)
-    .where("userUid", "==", userUid)
-    .where("isPending", "==", true)
-    .limit(1)
-    .get();
+  return await wrapTransaction(
+    firestore.runTransaction(async (transaction) => {
+      const sentenceSnapshot = await transaction.get(
+        sentencesCollection
+          .where(fieldPathDocumentId(), "==", sentenceId)
+          .where("userUid", "==", userUid)
+          .where("isPending", "==", true)
+          .limit(1)
+      );
 
-  if (sentenceSnapshot.empty) {
-    return failureAction(400, ["Invalid sentence ID provided."]);
-  }
+      if (sentenceSnapshot.empty) {
+        return Promise.reject(
+          new ActionError(400, "Invalid sentence ID provided.")
+        );
+      }
 
-  await sentenceSnapshot.docs[0].ref.update({
-    sentence,
-    tags: [...new Set(tags)],
-    updatedAt: fieldValueServerTimestamp(),
-  });
+      transaction.update(sentenceSnapshot.docs[0].ref, {
+        sentence,
+        tags: [...new Set(tags)],
+        updatedAt: fieldValueServerTimestamp(),
+      });
 
-  return successAction(void 0);
+      return void 0;
+    })
+  );
 };
