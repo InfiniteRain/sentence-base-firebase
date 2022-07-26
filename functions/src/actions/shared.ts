@@ -1,3 +1,5 @@
+/* eslint-disable require-jsdoc */
+
 import * as admin from "firebase-admin";
 
 export type ActionFailure = {
@@ -26,6 +28,26 @@ export const successAction = <T>(data: T): ActionSuccess<T> => ({
   type: "success",
   data,
 });
+
+export class ActionError extends Error {
+  constructor(public readonly code: number, public readonly message: string) {
+    super();
+  }
+}
+
+export const wrapTransaction = async <T>(
+  promise: Promise<T>
+): Promise<ActionResult<T>> => {
+  try {
+    return successAction(await promise);
+  } catch (error) {
+    if (error instanceof ActionError) {
+      return failureAction(error.code, [error.message]);
+    }
+
+    return failureAction(500, ["Unexpected Error"]);
+  }
+};
 
 export const firestore = admin.firestore();
 export const sentencesCollection = firestore.collection("sentences");
