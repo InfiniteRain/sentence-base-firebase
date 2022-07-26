@@ -1,5 +1,6 @@
 {
   "name": "functions",
+  "license": "GPL-3.0",
   "scripts": {
     "lint": "eslint --ext .js,.ts .",
     "build": "tsc --project tsconfig.prod.json",

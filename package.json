@@ -1,6 +1,7 @@
 {
   "name": "sentence-base-firebase",
   "version": "1.0.0",
+  "license": "GPL-3.0",
   "scripts": {
     "test:functions": "cd functions && yarn build && yarn test",
     "test": "yarn test:functions",
