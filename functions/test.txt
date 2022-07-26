@@ -1,0 +1,36 @@
+const admin = require("firebase-admin");
+const serviceAccount = require("../../sentence-base.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
+const firestore = admin.firestore();
+
+const getDocumentById = async (collection, id) =>
+  await firestore.collection(collection).doc(id).get();
+
+const getDocumentDataById = async (collection, id) =>
+  (await getDocumentById(collection, id)).data();
+
+// getDocumentDataById("users", "Rt42y5yIdaT9RaNGRyKmk05fnHV2").then((value) => {
+//   console.log(value);
+// });
+
+(async () => {
+  const users = [
+    "Rt42y5yIdaT9RaNGRyKmk05fnHV2",
+    "e2SoQsDlq6RGFGOtyu8k1CJCeO92",
+  ];
+
+  for (const userUid of users) {
+    console.log(userUid);
+    for (const collection of ["words", "sentences", "batches"]) {
+      const snap = await firestore
+        .collection(collection)
+        .where("userUid", "==", userUid)
+        .get();
+      console.log(collection, snap.docs.length);
+    }
+  }
+})();

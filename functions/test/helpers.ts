@@ -3,14 +3,15 @@ import fetch, { Headers } from "node-fetch";
 import { nanoid } from "nanoid/non-secure";
 import * as admin from "firebase-admin";
 
-export const apiUrl = `http://localhost:${firebaseJson.emulators.functions.port}/sentence-base/us-central1/api/v1`;
+export const apiUrl = `http://localhost:${firebaseJson.emulators.functions.port}/sentence-base-dev/us-central1/api/v1`;
 export const authUrl = `http://localhost:${firebaseJson.emulators.auth.port}/www.googleapis.com/identitytoolkit/v3/relyingparty/verifyCustomToken?key=${process.env.API_KEY}`;
-export const projectId = "sentence-base";
+export const projectId = "sentence-base-dev";
 export const testUserId = "testUser";
 export const timestampMatcher = {
   _nanoseconds: expect.any(Number),
   _seconds: expect.any(Number),
 };
+const metaCountersDocumentId = "counters";
 
 export const expectErrors = async (
   responsePromise: Promise<unknown>,
@@ -74,6 +75,47 @@ export const getIdToken = async (uid: string) => {
   const json = await response.json();
 
   return json.idToken;
+};
+
+export const getMetaCounter = async (collection: string): Promise<number> => {
+  const firestore = admin.firestore();
+
+  const document = await firestore
+    .collection("meta")
+    .doc(metaCountersDocumentId)
+    .get();
+
+  return document.data()?.[collection] ?? 0;
+};
+
+export const getUserMetaCounter = async (
+  userUid: string,
+  collection: string
+): Promise<number> => {
+  const firestore = admin.firestore();
+
+  const document = await firestore.collection("users").doc(userUid).get();
+
+  return document.data()?.counters?.[collection] ?? 0;
+};
+
+export const waitForCounterUpdate = async (
+  original: number,
+  collection: string
+): Promise<void> => {
+  const firestore = admin.firestore();
+  return await new Promise<void>((resolve) => {
+    const unsubscribe = firestore
+      .collection("meta")
+      .doc(metaCountersDocumentId)
+      .onSnapshot((snap) => {
+        const currentCounter = snap.data()?.[collection];
+        if (currentCounter !== undefined && currentCounter !== original) {
+          unsubscribe();
+          resolve();
+        }
+      });
+  });
 };
 
 export const initAuth = async (): Promise<[admin.auth.UserRecord, string]> => {
@@ -141,6 +183,26 @@ export const deleteSentence = async (sentenceId: string, token?: string) => {
   const response = await fetch(`${apiUrl}/sentences/${sentenceId}`, {
     method: "delete",
     headers: new Headers({
+      Authorization: token ? `Bearer ${token}` : "",
+    }),
+  });
+  return await response.json();
+};
+
+export const editSentence = async (
+  sentenceId: string,
+  sentence: string,
+  tags: string[],
+  token?: string
+) => {
+  const response = await fetch(`${apiUrl}/sentences/${sentenceId}`, {
+    method: "post",
+    body: JSON.stringify({
+      sentence,
+      tags,
+    }),
+    headers: new Headers({
+      "Content-Type": "application/json",
       Authorization: token ? `Bearer ${token}` : "",
     }),
   });
