@@ -13,8 +13,10 @@ type Sentence = {
 export const getPendingSentences = async (
   userUid: string
 ): Promise<ActionResult<Sentence[]>> => {
-  const { firestore, sentencesCollection, wordsCollection, successAction } =
-    await import("./shared");
+  const { firestore, sentencesCollection, wordsCollection } = await import(
+    "../../shared"
+  );
+  const { successAction } = await import("./shared");
 
   const sentenceSnapshot = await sentencesCollection
     .where("userUid", "==", userUid)
@@ -65,10 +67,9 @@ export const addSentence = async (
     usersCollection,
     fieldValueServerTimestamp,
     fieldValueIncrement,
-    wrapTransaction,
-    ActionError,
-  } = await import("./shared");
-  const { config } = await import("../config");
+  } = await import("../../shared");
+  const { wrapTransaction, ActionError } = await import("./shared");
+  const { config } = await import("../../config");
 
   return await wrapTransaction(
     firestore.runTransaction(async (transaction) => {
@@ -141,9 +142,8 @@ export const deleteSentence = async (
     fieldValueServerTimestamp,
     fieldValueIncrement,
     fieldPathDocumentId,
-    wrapTransaction,
-    ActionError,
-  } = await import("./shared");
+  } = await import("../../shared");
+  const { wrapTransaction, ActionError } = await import("./shared");
 
   return await wrapTransaction(
     firestore.runTransaction(async (transaction) => {
@@ -191,9 +191,8 @@ export const editSentence = async (
     sentencesCollection,
     fieldValueServerTimestamp,
     fieldPathDocumentId,
-    wrapTransaction,
-    ActionError,
-  } = await import("./shared");
+  } = await import("../../shared");
+  const { wrapTransaction, ActionError } = await import("./shared");
 
   return await wrapTransaction(
     firestore.runTransaction(async (transaction) => {

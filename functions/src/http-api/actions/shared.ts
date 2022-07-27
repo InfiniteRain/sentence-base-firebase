@@ -1,7 +1,5 @@
 /* eslint-disable require-jsdoc */
 
-import * as admin from "firebase-admin";
-
 export type ActionFailure = {
   type: "failure";
   code: number;
@@ -48,13 +46,3 @@ export const wrapTransaction = async <T>(
     return failureAction(500, ["Unexpected Error"]);
   }
 };
-
-export const firestore = admin.firestore();
-export const sentencesCollection = firestore.collection("sentences");
-export const wordsCollection = firestore.collection("words");
-export const batchesCollection = firestore.collection("batches");
-export const usersCollection = firestore.collection("users");
-export const fieldValueServerTimestamp =
-  admin.firestore.FieldValue.serverTimestamp;
-export const fieldValueIncrement = admin.firestore.FieldValue.increment;
-export const fieldPathDocumentId = admin.firestore.FieldPath.documentId;

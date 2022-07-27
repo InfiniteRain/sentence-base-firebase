@@ -1,6 +1,6 @@
-import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-import { server } from "./server";
+import * as functions from "firebase-functions";
+import { server } from "./http-api/server";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -28,14 +28,11 @@ const updateMetaCounter = async (
   collection: string,
   type: "increment" | "decrement"
 ) => {
-  const firestore = admin.firestore();
-  const metaCollection = firestore.collection("meta");
+  const { metaCollection, fieldValueIncrement } = await import("./shared");
 
   return await metaCollection.doc(metaCountersDocumentId).set(
     {
-      [collection]: admin.firestore.FieldValue.increment(
-        type === "increment" ? 1 : -1
-      ),
+      [collection]: fieldValueIncrement(type === "increment" ? 1 : -1),
     },
     { merge: true }
   );
@@ -53,8 +50,9 @@ const updateUserMetaCounter = async (
   collection: string,
   type: "increment" | "decrement"
 ) => {
-  const firestore = admin.firestore();
-  const userDocument = firestore.collection("users").doc(userUid);
+  const { usersCollection, fieldValueIncrement } = await import("./shared");
+
+  const userDocument = usersCollection.doc(userUid);
   const data = (await userDocument.get()).data();
 
   if (!data) {
@@ -64,9 +62,7 @@ const updateUserMetaCounter = async (
   return userDocument.set(
     {
       counters: {
-        [collection]: admin.firestore.FieldValue.increment(
-          type === "increment" ? 1 : -1
-        ),
+        [collection]: fieldValueIncrement(type === "increment" ? 1 : -1),
       },
     },
     { merge: true }
@@ -121,8 +117,7 @@ export const decrementCountersOnDelete = functions.firestore
 export const createUserDocument = functions.auth
   .user()
   .onCreate(async (user) => {
-    const firestore = admin.firestore();
-    const usersCollection = firestore.collection("users");
+    const { usersCollection } = await import("./shared");
 
     await usersCollection.doc(user.uid).set({
       pendingSentences: 0,
@@ -135,3 +130,4 @@ export const createUserDocument = functions.auth
 export const api = functions.https.onRequest(server);
 
 // todo: chanding the userId from one to another will cause a desync!
+// todo: use transaction in all non-api funcs as well

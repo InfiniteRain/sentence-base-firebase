@@ -1,6 +1,6 @@
-import express, { NextFunction, Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
+import express from "express";
 import cors from "cors";
-import * as admin from "firebase-admin";
 import { sentencesRouter } from "./routes/v1/sentences";
 import { batchesRouter } from "./routes/v1/batches";
 
@@ -15,6 +15,8 @@ server.use(cors({ origin: true }));
  * Handle authentication.
  */
 server.use(async (req, _res, next) => {
+  const { auth } = await import("../shared");
+
   const authorizationHeader = req.headers["authorization"];
 
   if (!authorizationHeader) {
@@ -35,7 +37,7 @@ server.use(async (req, _res, next) => {
   const token = authorizationSegments[1];
 
   try {
-    req.user = await admin.auth().verifyIdToken(token);
+    req.user = await auth.verifyIdToken(token);
   } catch {
     //
   }

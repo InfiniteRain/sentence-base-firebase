@@ -1,6 +1,6 @@
 import { Router as createRouter } from "express";
 import { body, validationResult } from "express-validator";
-import { config } from "../../config";
+import { config } from "../../../config";
 
 export const batchesRouter = createRouter();
 

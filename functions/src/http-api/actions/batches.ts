@@ -12,9 +12,8 @@ export const createBatch = async (
     usersCollection,
     fieldPathDocumentId,
     fieldValueServerTimestamp,
-    wrapTransaction,
-    ActionError,
-  } = await import("./shared");
+  } = await import("../../shared");
+  const { wrapTransaction, ActionError } = await import("./shared");
 
   return await wrapTransaction(
     firestore.runTransaction(async (transaction) => {
