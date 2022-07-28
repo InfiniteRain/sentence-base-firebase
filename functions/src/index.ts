@@ -211,16 +211,25 @@ export const cleanEventIds = functions.pubsub
     const { firestore, eventIdsCollection, timestampNow, timestampFromMillis } =
       await import("./shared");
 
-    await firestore.runTransaction(async (transaction) => {
-      const now = timestampNow();
-      const threshold = timestampFromMillis(now.toMillis() - 3600000);
+    const now = timestampNow();
+    const threshold = timestampFromMillis(now.toMillis() - 3600000);
 
-      const expiredEventIdSnapshot = await transaction.get(
-        eventIdsCollection.where("createdAt", "<", threshold)
-      );
+    for (;;) {
+      const snap = await eventIdsCollection
+        .where("createdAt", "<", threshold)
+        .limit(100)
+        .get();
 
-      for (const snap of expiredEventIdSnapshot.docs) {
-        transaction.delete(snap.ref);
+      if (snap.empty) {
+        break;
       }
-    });
+
+      const batch = firestore.batch();
+
+      for (const doc of snap.docs) {
+        batch.delete(doc.ref);
+      }
+
+      await batch.commit();
+    }
   });
