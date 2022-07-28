@@ -99,23 +99,62 @@ export const getUserMetaCounter = async (
   return document.data()?.counters?.[collection] ?? 0;
 };
 
-export const waitForCounterUpdate = async (
-  original: number,
-  collection: string
+export const waitForEventIdAddition = async (
+  original: number
 ): Promise<void> => {
   const firestore = admin.firestore();
-  return await new Promise<void>((resolve) => {
-    const unsubscribe = firestore
-      .collection("meta")
-      .doc(metaCountersDocumentId)
-      .onSnapshot((snap) => {
-        const currentCounter = snap.data()?.[collection];
-        if (currentCounter !== undefined && currentCounter !== original) {
-          unsubscribe();
-          resolve();
-        }
-      });
+
+  await new Promise<void>((resolve) => {
+    const unsubscribe = firestore.collection("eventIds").onSnapshot((snap) => {
+      const currentCount = snap.size;
+      if (currentCount !== undefined && currentCount !== original) {
+        unsubscribe();
+        resolve();
+      }
+    });
   });
+};
+
+export const waitForCounterUpdate = async (
+  original: number,
+  collection: string,
+  userUid?: string
+): Promise<void> => {
+  const firestore = admin.firestore();
+
+  await Promise.all([
+    new Promise<void>((resolve) => {
+      const unsubscribe = firestore
+        .collection("meta")
+        .doc(metaCountersDocumentId)
+        .onSnapshot((snap) => {
+          const currentCounter = snap.data()?.[collection];
+          if (currentCounter !== undefined && currentCounter !== original) {
+            unsubscribe();
+            resolve();
+          }
+        });
+    }),
+    ...(userUid
+      ? [
+          new Promise<void>((resolve) => {
+            const unsubscribe = firestore
+              .collection("users")
+              .doc(userUid)
+              .onSnapshot((snap) => {
+                const currentCounter = snap.data()?.counters?.[collection];
+                if (
+                  currentCounter !== undefined &&
+                  currentCounter !== original
+                ) {
+                  unsubscribe();
+                  resolve();
+                }
+              });
+          }),
+        ]
+      : []),
+  ]);
 };
 
 export const initAuth = async (): Promise<[admin.auth.UserRecord, string]> => {

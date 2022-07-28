@@ -20,17 +20,20 @@ const metaCountersDocumentId = "counters";
 
 /**
  * Update the counter meta information for the collection.
+ * @param transaction The transaction used by a function.
  * @param collection The name of the collection to update the value for.
  * @param type Signifies whether the current value should increment or decrement.
  * @returns Promise to await.
  */
 const updateMetaCounter = async (
+  transaction: FirebaseFirestore.Transaction,
   collection: string,
   type: "increment" | "decrement"
 ) => {
   const { metaCollection, fieldValueIncrement } = await import("./shared");
 
-  return await metaCollection.doc(metaCountersDocumentId).set(
+  transaction.set(
+    metaCollection.doc(metaCountersDocumentId),
     {
       [collection]: fieldValueIncrement(type === "increment" ? 1 : -1),
     },
@@ -40,12 +43,14 @@ const updateMetaCounter = async (
 
 /**
  * Update the counter user meta information for the collection.
+ * @param transaction The transaction used by a function.
  * @param userUid The UID of the user to update the value for.
  * @param collection The name of the collection to update the value for.
  * @param type Signifies whether the current value should increment or decrement.
  * @returns Promise to await.
  */
 const updateUserMetaCounter = async (
+  transaction: FirebaseFirestore.Transaction,
   userUid: string,
   collection: string,
   type: "increment" | "decrement"
@@ -53,13 +58,14 @@ const updateUserMetaCounter = async (
   const { usersCollection, fieldValueIncrement } = await import("./shared");
 
   const userDocument = usersCollection.doc(userUid);
-  const data = (await userDocument.get()).data();
+  const data = (await transaction.get(userDocument)).data();
 
   if (!data) {
     return;
   }
 
-  return userDocument.set(
+  transaction.set(
+    userDocument,
     {
       counters: {
         [collection]: fieldValueIncrement(type === "increment" ? 1 : -1),
@@ -70,49 +76,121 @@ const updateUserMetaCounter = async (
 };
 
 /**
- * Updates the meta information upon document creation.
+ * Record a given event ID in Firestore. Used for idempotency checks.
+ * @param transaction The transaction used by a function.
+ * @param eventId The event ID in question.
+ */
+export const recordEventId = async (
+  transaction: FirebaseFirestore.Transaction,
+  eventId: string
+) => {
+  const { eventIdsCollection, fieldValueServerTimestamp } = await import(
+    "./shared"
+  );
+
+  transaction.create(eventIdsCollection.doc(eventId), {
+    createdAt: fieldValueServerTimestamp(),
+  });
+};
+
+/**
+ * Check if a given event ID record exists. Used for idempotency checks.
+ * @param transaction The transaction used by a function.
+ * @param eventId The event ID in question.
+ * @returns A boolean indicating the record existence.
+ */
+export const eventIdExists = async (
+  transaction: FirebaseFirestore.Transaction,
+  eventId: string
+): Promise<boolean> => {
+  const { eventIdsCollection } = await import("./shared");
+
+  return (await transaction.get(eventIdsCollection.doc(eventId))).exists;
+};
+
+/**
+ * Expose the REST API through the HTTPS function.
+ */
+export const api = functions.https.onRequest(server);
+
+/**
+ * Update the meta information upon document creation.
  */
 export const incrementCountersOnCreate = functions.firestore
   .document("{collection}/{documentId}")
   .onCreate(async (change, context) => {
+    const { firestore } = await import("./shared");
     const collection = context.params.collection;
 
-    if (collection === "meta") {
+    // Don't execute for "meta" and "eventIds" collections to prevent infinite
+    // loops.
+    if (["meta", "eventIds"].includes(collection)) {
       return;
     }
 
-    const userUid = change.data().userUid;
+    await firestore.runTransaction(async (transaction) => {
+      // Abort operation if the event ID has already been recorded.
+      if (await eventIdExists(transaction, context.eventId)) {
+        return;
+      }
 
-    if (typeof userUid === "string") {
-      await updateUserMetaCounter(userUid, collection, "increment");
-    }
+      const userUid = change.data().userUid;
 
-    await updateMetaCounter(collection, "increment");
+      if (typeof userUid === "string") {
+        await updateUserMetaCounter(
+          transaction,
+          userUid,
+          collection,
+          "increment"
+        );
+      }
+
+      await updateMetaCounter(transaction, collection, "increment");
+      // Record the event ID for the sake of idempotency.
+      await recordEventId(transaction, context.eventId);
+    });
   });
 
 /**
- * Updates the meta information upon document deletion.
+ * Update the meta information upon document deletion.
  */
 export const decrementCountersOnDelete = functions.firestore
   .document("{collection}/{documentId}")
   .onDelete(async (change, context) => {
+    const { firestore } = await import("./shared");
     const collection = context.params.collection;
 
-    if (collection === "meta") {
+    // Don't execute for "meta" and "eventIds" collections to prevent infinite
+    // loops.
+    if (["meta", "eventIds"].includes(collection)) {
       return;
     }
 
-    const userUid = change.data().userUid;
+    await firestore.runTransaction(async (transaction) => {
+      // Abort operation if the event ID has already been recorded.
+      if (await eventIdExists(transaction, context.eventId)) {
+        return;
+      }
 
-    if (typeof userUid === "string") {
-      await updateUserMetaCounter(userUid, collection, "decrement");
-    }
+      const userUid = change.data().userUid;
 
-    await updateMetaCounter(collection, "decrement");
+      if (typeof userUid === "string") {
+        await updateUserMetaCounter(
+          transaction,
+          userUid,
+          collection,
+          "decrement"
+        );
+      }
+
+      await updateMetaCounter(transaction, collection, "decrement");
+      // Record the event ID for the sake of idempotency.
+      await recordEventId(transaction, context.eventId);
+    });
   });
 
 /**
- * Creates a user document upon registration.
+ * Create a user document upon registration.
  */
 export const createUserDocument = functions.auth
   .user()
@@ -125,9 +203,24 @@ export const createUserDocument = functions.auth
   });
 
 /**
- * Exposes the REST API through the HTTPS function.
+ * Clean all event ID records that are older then 1 hour.
  */
-export const api = functions.https.onRequest(server);
+export const cleanEventIds = functions.pubsub
+  .schedule("every 1 hours")
+  .onRun(async () => {
+    const { firestore, eventIdsCollection, timestampNow, timestampFromMillis } =
+      await import("./shared");
 
-// todo: chanding the userId from one to another will cause a desync!
-// todo: use transaction in all non-api funcs as well
+    await firestore.runTransaction(async (transaction) => {
+      const now = timestampNow();
+      const threshold = timestampFromMillis(now.toMillis() - 3600000);
+
+      const expiredEventIdSnapshot = await transaction.get(
+        eventIdsCollection.where("createdAt", "<", threshold)
+      );
+
+      for (const snap of expiredEventIdSnapshot.docs) {
+        transaction.delete(snap.ref);
+      }
+    });
+  });

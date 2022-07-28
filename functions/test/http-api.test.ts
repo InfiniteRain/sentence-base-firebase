@@ -10,8 +10,6 @@ import {
   newBatch,
   deleteSentence,
   getPendingSentences,
-  getMetaCounter,
-  waitForCounterUpdate,
   editSentence,
 } from "./helpers";
 import * as admin from "firebase-admin";
@@ -24,6 +22,8 @@ describe("Api tests", () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) {
     throw new Error("You're not running the test suite in an emulator!");
   }
+
+  jest.setTimeout(10000);
 
   const testWords: [string, string][] = [
     ["ペン", "ペン"],
@@ -83,37 +83,6 @@ describe("Api tests", () => {
   });
 
   describe("logged out", () => {
-    jest.setTimeout(10000);
-
-    test("createUserDocument should create new user document", async () => {
-      await expect(getDocumentCount("users")).resolves.toEqual(0);
-
-      const [user] = await initAuth();
-
-      await expect(getDocumentCount("users")).resolves.toEqual(1);
-
-      const userData = await getDocumentDataById("users", user.uid);
-
-      expect(userData).toEqual({
-        pendingSentences: 0,
-      });
-    });
-
-    test("createUserDocument should increment the meta counter", async () => {
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-      await expect(getMetaCounter("users")).resolves.toEqual(0);
-
-      await initAuth();
-      await waitForCounterUpdate(0, "users");
-
-      await expect(getMetaCounter("users")).resolves.toEqual(1);
-
-      await initAuth();
-      await waitForCounterUpdate(1, "users");
-
-      await expect(getMetaCounter("users")).resolves.toEqual(2);
-    });
-
     test("addSentence should reject", async () => {
       await expectErrors(addSentence("猫", "ネコ", "これは猫です。", []), [
         "Not logged in.",

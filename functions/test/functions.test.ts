@@ -8,6 +8,7 @@ import {
   getMetaCounter,
   waitForCounterUpdate,
   getUserMetaCounter,
+  waitForEventIdAddition,
 } from "./helpers";
 import * as admin from "firebase-admin";
 
@@ -19,6 +20,8 @@ describe("Function tests", () => {
   if (!process.env.FIRESTORE_EMULATOR_HOST) {
     throw new Error("You're not running the test suite in an emulator!");
   }
+
+  jest.setTimeout(10000);
 
   const firestore = admin.firestore();
 
@@ -34,8 +37,69 @@ describe("Function tests", () => {
   ): Promise<FirebaseFirestore.DocumentData | undefined> =>
     (await getDocumentById(collection, id)).data();
 
+  const getDocumentCount = async (collection: string): Promise<number> => {
+    const snap = await firestore.collection(collection).get();
+    return snap.docs.length;
+  };
+
   beforeEach(async () => {
     await clean();
+  });
+
+  describe("logged out", () => {
+    test("incrementCountersOnCreate and decrementCountersOnDelete should record the eventIds", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      const originalCount = await getDocumentCount("eventIds");
+
+      const [user] = await initAuth();
+
+      await waitForEventIdAddition(originalCount);
+      await expect(getDocumentCount("eventIds")).resolves.toEqual(
+        originalCount + 1
+      );
+
+      await firestore.collection("users").doc(user.uid).delete();
+
+      await waitForEventIdAddition(originalCount + 1);
+      await expect(getDocumentCount("eventIds")).resolves.toEqual(
+        originalCount + 2
+      );
+
+      // Infinite loop check
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await expect(getDocumentCount("eventIds")).resolves.toEqual(
+        originalCount + 2
+      );
+    });
+
+    test("createUserDocument should create new user document", async () => {
+      await expect(getDocumentCount("users")).resolves.toEqual(0);
+
+      const [user] = await initAuth();
+
+      await expect(getDocumentCount("users")).resolves.toEqual(1);
+
+      const userData = await getDocumentDataById("users", user.uid);
+
+      expect(userData).toEqual({
+        pendingSentences: 0,
+      });
+    });
+
+    test("createUserDocument should increment the meta counter", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await expect(getMetaCounter("users")).resolves.toEqual(0);
+
+      await initAuth();
+      await waitForCounterUpdate(0, "users");
+
+      await expect(getMetaCounter("users")).resolves.toEqual(1);
+
+      await initAuth();
+      await waitForCounterUpdate(1, "users");
+
+      await expect(getMetaCounter("users")).resolves.toEqual(2);
+    });
   });
 
   describe("logged in", () => {
@@ -71,8 +135,8 @@ describe("Function tests", () => {
         );
 
         await Promise.all([
-          waitForCounterUpdate(i, "words"),
-          waitForCounterUpdate(i, "sentences"),
+          waitForCounterUpdate(i, "words", userUid),
+          waitForCounterUpdate(i, "sentences", userUid),
         ]);
         sentenceIds.push(result.data.sentenceId);
 
@@ -91,7 +155,7 @@ describe("Function tests", () => {
 
       await newBatch(sentenceIds, token);
 
-      await waitForCounterUpdate(0, "batches");
+      await waitForCounterUpdate(0, "batches", userUid);
       await expect(getMetaCounter("batches")).resolves.toEqual(1);
       await expect(getUserMetaCounter(userUid, "batches")).resolves.toEqual(1);
     });
@@ -113,21 +177,21 @@ describe("Function tests", () => {
           token
         );
         await Promise.all([
-          waitForCounterUpdate(i, "words"),
-          waitForCounterUpdate(i, "sentences"),
+          waitForCounterUpdate(i, "words", userUid),
+          waitForCounterUpdate(i, "sentences", userUid),
         ]);
 
         sentenceIds.push(result.data.sentenceId);
       }
 
       const result = await newBatch(sentenceIds, token);
-      await waitForCounterUpdate(0, "batches");
+      await waitForCounterUpdate(0, "batches", userUid);
 
       await expect(getMetaCounter("batches")).resolves.toEqual(1);
       await expect(getUserMetaCounter(userUid, "batches")).resolves.toEqual(1);
 
       await deleteDocumentById("batches", result.data.batchId);
-      await waitForCounterUpdate(1, "batches");
+      await waitForCounterUpdate(1, "batches", userUid);
 
       await expect(getMetaCounter("batches")).resolves.toEqual(0);
       await expect(getUserMetaCounter(userUid, "batches")).resolves.toEqual(0);
@@ -147,13 +211,13 @@ describe("Function tests", () => {
         );
 
         await Promise.all([
-          waitForCounterUpdate(i + 1, "words"),
+          waitForCounterUpdate(i + 1, "words", userUid),
           deleteDocumentById("words", wordId),
         ]);
 
         await Promise.all([
           deleteDocumentById("sentences", sentenceId),
-          waitForCounterUpdate(i + 1, "sentences"),
+          waitForCounterUpdate(i + 1, "sentences", userUid),
         ]);
 
         await expect(getMetaCounter("words")).resolves.toEqual(i);

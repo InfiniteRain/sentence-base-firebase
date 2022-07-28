@@ -7,7 +7,10 @@ export const wordsCollection = firestore.collection("words");
 export const batchesCollection = firestore.collection("batches");
 export const usersCollection = firestore.collection("users");
 export const metaCollection = firestore.collection("meta");
+export const eventIdsCollection = firestore.collection("eventIds");
 export const fieldValueServerTimestamp =
   admin.firestore.FieldValue.serverTimestamp;
 export const fieldValueIncrement = admin.firestore.FieldValue.increment;
 export const fieldPathDocumentId = admin.firestore.FieldPath.documentId;
+export const timestampNow = admin.firestore.Timestamp.now;
+export const timestampFromMillis = admin.firestore.Timestamp.fromMillis;
