@@ -15,9 +15,9 @@ batchesRouter.post(
       (array ?? []).every((element: unknown) => typeof element === "string")
     ),
   async (req, res) => {
-    const { authenticationError, validationError, wrapActionResult } =
-      await import("./shared");
-    const { createBatch } = await import("../../actions/batches");
+    const { authenticationError, validationError, wrapActionResultInResponse } =
+      await import("./helpers");
+    const { createBatch } = await import("../../../actions/batches");
 
     if (!req.user) {
       authenticationError(res);
@@ -31,7 +31,7 @@ batchesRouter.post(
       return;
     }
 
-    const result = await createBatch(req.user.uid, req.body.sentences);
-    wrapActionResult(res, result, (batchId) => ({ batchId }));
+    const action = createBatch(req.user.uid, req.body.sentences);
+    wrapActionResultInResponse(res, action, (batchId) => ({ batchId }));
   }
 );

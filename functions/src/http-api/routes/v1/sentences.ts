@@ -6,16 +6,18 @@ export const sentencesRouter = createRouter();
 sentencesRouter
   .route("/")
   .get(async (req, res) => {
-    const { authenticationError, wrapActionResult } = await import("./shared");
-    const { getPendingSentences } = await import("../../actions/sentences");
+    const { authenticationError, wrapActionResultInResponse } = await import(
+      "./helpers"
+    );
+    const { getPendingSentences } = await import("../../../actions/sentences");
 
     if (!req.user) {
       authenticationError(res);
       return;
     }
 
-    const result = await getPendingSentences(req.user.uid);
-    wrapActionResult(res, result, (sentences) => ({ sentences }));
+    const action = getPendingSentences(req.user.uid);
+    wrapActionResultInResponse(res, action, (sentences) => ({ sentences }));
   })
   .post(
     body(
@@ -42,9 +44,12 @@ sentencesRouter
         (array ?? []).every((element: unknown) => typeof element === "string")
       ),
     async (req, res) => {
-      const { authenticationError, validationError, wrapActionResult } =
-        await import("./shared");
-      const { addSentence } = await import("../../actions/sentences");
+      const {
+        authenticationError,
+        validationError,
+        wrapActionResultInResponse: wrapActionResult,
+      } = await import("./helpers");
+      const { addSentence } = await import("../../../actions/sentences");
 
       if (!req.user) {
         authenticationError(res);
@@ -58,30 +63,32 @@ sentencesRouter
         return;
       }
 
-      const result = await addSentence(
+      const action = addSentence(
         req.user.uid,
         req.body.dictionaryForm.trim(),
         req.body.reading.trim(),
         req.body.sentence.trim(),
         req.body.tags
       );
-      wrapActionResult(res, result, (sentenceId) => ({ sentenceId }));
+      wrapActionResult(res, action, (sentenceId) => ({ sentenceId }));
     }
   );
 
 sentencesRouter
   .route("/:sentenceId")
   .delete(async (req, res) => {
-    const { authenticationError, wrapActionResult } = await import("./shared");
-    const { deleteSentence } = await import("../../actions/sentences");
+    const { authenticationError, wrapActionResultInResponse } = await import(
+      "./helpers"
+    );
+    const { deleteSentence } = await import("../../../actions/sentences");
 
     if (!req.user) {
       authenticationError(res);
       return;
     }
 
-    const result = await deleteSentence(req.user.uid, req.params.sentenceId);
-    wrapActionResult(res, result, () => void 0);
+    const action = deleteSentence(req.user.uid, req.params.sentenceId);
+    wrapActionResultInResponse(res, action, () => void 0);
   })
   .post(
     body(
@@ -96,22 +103,22 @@ sentencesRouter
         (array ?? []).every((element: unknown) => typeof element === "string")
       ),
     async (req, res) => {
-      const { authenticationError, wrapActionResult } = await import(
-        "./shared"
+      const { authenticationError, wrapActionResultInResponse } = await import(
+        "./helpers"
       );
-      const { editSentence } = await import("../../actions/sentences");
+      const { editSentence } = await import("../../../actions/sentences");
 
       if (!req.user) {
         authenticationError(res);
         return;
       }
 
-      const result = await editSentence(
+      const action = editSentence(
         req.user.uid,
         req.params.sentenceId,
         req.body.sentence.trim(),
         req.body.tags
       );
-      wrapActionResult(res, result, () => void 0);
+      wrapActionResultInResponse(res, action, () => void 0);
     }
   );

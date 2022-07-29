@@ -1,6 +1,6 @@
 import { Response } from "express";
 import { ValidationError } from "express-validator";
-import type { ActionResult } from "../../actions/shared";
+import { ActionHttpError } from "../../../actions/action-http-error";
 
 export const errorResponse = (
   res: Response,
@@ -25,17 +25,20 @@ export const validationError = (res: Response, errors: ValidationError[]) => {
   errorResponse(res, 422, errors);
 };
 
-export const wrapActionResult = <T>(
+export const wrapActionResultInResponse = async <T>(
   res: Response,
-  result: ActionResult<T>,
-  dataWrapper: (
-    data: T
-  ) => T extends undefined ? undefined : Record<string, unknown>
+  actionPromise: Promise<T>,
+  dataWrapper: (data: T) => T extends void ? undefined : Record<string, unknown>
 ) => {
-  if (result.type === "failure") {
-    errorResponse(res, result.code, result.errors);
-    return;
-  }
+  try {
+    const data = await actionPromise;
+    successResponse(res, dataWrapper(data));
+  } catch (error) {
+    if (error instanceof ActionHttpError) {
+      errorResponse(res, error.code, [error.message]);
+      return;
+    }
 
-  successResponse(res, dataWrapper(result.data));
+    errorResponse(res, 500, ["Internal server error."]);
+  }
 };
