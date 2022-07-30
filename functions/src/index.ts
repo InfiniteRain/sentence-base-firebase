@@ -61,3 +61,14 @@ export const cleanEventIds = functions.pubsub
 
     await eventIdCleanup();
   });
+
+/**
+ * Run a weekly Firestore backup.
+ */
+export const weeklyBackup = functions.pubsub
+  .schedule("every 168 hours")
+  .onRun(async () => {
+    const { backup } = await import("./actions/backup");
+
+    await backup();
+  });
