@@ -6,6 +6,15 @@
       "fields": [
         { "fieldPath": "isPending", "order": "ASCENDING" },
         { "fieldPath": "userUid", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sentences",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isPending", "order": "ASCENDING" },
+        { "fieldPath": "userUid", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
     },
