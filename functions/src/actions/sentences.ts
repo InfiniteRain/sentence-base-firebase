@@ -101,6 +101,7 @@ export const addSentence = async (
           reading,
           frequency: 1,
           isMined: false,
+          buryLevel: 0,
           createdAt: currentTimestamp,
           updatedAt: currentTimestamp,
         });

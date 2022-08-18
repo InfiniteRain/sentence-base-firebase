@@ -214,6 +214,7 @@ describe("Api tests", () => {
           reading: testReading,
           frequency: 1,
           isMined: false,
+          buryLevel: 0,
           createdAt: timestampMatcher,
           updatedAt: timestampMatcher,
         });
@@ -289,6 +290,7 @@ describe("Api tests", () => {
           reading: testReading,
           frequency: 1,
           isMined: false,
+          buryLevel: 0,
           createdAt: timestampMatcher,
           updatedAt: timestampMatcher,
         });
@@ -342,6 +344,7 @@ describe("Api tests", () => {
           reading: testReading,
           frequency: 3,
           isMined: false,
+          buryLevel: 0,
           createdAt: timestampMatcher,
           updatedAt: timestampMatcher,
         });
@@ -1002,7 +1005,7 @@ describe("Api tests", () => {
         for (const wordId of pushToTheEnd) {
           const wordData = await getDocumentDataById("words", wordId);
 
-          expect(wordData?.buryLevel ?? 0).toEqual(0);
+          expect(wordData?.buryLevel).toEqual(0);
         }
 
         await createBatchFromBacklog(firstBatch, [], pushToTheEnd, token);
@@ -1010,7 +1013,7 @@ describe("Api tests", () => {
         for (const wordId of pushToTheEnd) {
           const wordData = await getDocumentDataById("words", wordId);
 
-          expect(wordData?.buryLevel ?? 0).toEqual(1);
+          expect(wordData?.buryLevel).toEqual(1);
         }
 
         await createBatchFromBacklog(secondBatch, [], pushToTheEnd, token);
@@ -1018,7 +1021,7 @@ describe("Api tests", () => {
         for (const wordId of pushToTheEnd) {
           const wordData = await getDocumentDataById("words", wordId);
 
-          expect(wordData?.buryLevel ?? 0).toEqual(2);
+          expect(wordData?.buryLevel).toEqual(2);
         }
       });
 
@@ -1050,7 +1053,7 @@ describe("Api tests", () => {
         for (const wordId of pushToTheEnd) {
           const wordData = await getDocumentDataById("words", wordId);
 
-          expect(wordData?.buryLevel ?? 0).toEqual(0);
+          expect(wordData?.buryLevel).toEqual(0);
         }
 
         await createBatchFromBacklog(batch, markAsMined, pushToTheEnd, token);
@@ -1064,7 +1067,7 @@ describe("Api tests", () => {
         for (const wordId of pushToTheEnd) {
           const wordData = await getDocumentDataById("words", wordId);
 
-          expect(wordData?.buryLevel ?? 0).toEqual(1);
+          expect(wordData?.buryLevel).toEqual(1);
         }
       });
     });
