@@ -1,6 +1,16 @@
 {
   "indexes": [
     {
+      "collectionGroup": "words",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isMined", "order": "ASCENDING" },
+        { "fieldPath": "userUid", "order": "ASCENDING" },
+        { "fieldPath": "buryLevel", "order": "DESCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "sentences",
       "queryScope": "COLLECTION",
       "fields": [
