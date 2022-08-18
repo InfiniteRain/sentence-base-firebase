@@ -6,8 +6,9 @@
       "fields": [
         { "fieldPath": "isMined", "order": "ASCENDING" },
         { "fieldPath": "userUid", "order": "ASCENDING" },
-        { "fieldPath": "buryLevel", "order": "DESCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        { "fieldPath": "buryLevel", "order": "ASCENDING" },
+        { "fieldPath": "frequency", "order": "DESCENDING" },
+        { "fieldPath": "updatedAt", "order": "DESCENDING" }
       ]
     },
     {
