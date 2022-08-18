@@ -4,7 +4,7 @@ import {
   clean,
   initAuth,
   addSentence,
-  newBatch,
+  createBatch,
   getMetaCounter,
   waitForCounterUpdate,
   getUserMetaCounter,
@@ -153,7 +153,7 @@ describe("Function tests", () => {
       await expect(getMetaCounter("batches")).resolves.toEqual(0);
       await expect(getUserMetaCounter(userUid, "batches")).resolves.toEqual(0);
 
-      await newBatch(sentenceIds, token);
+      await createBatch(sentenceIds, token);
 
       await waitForCounterUpdate(0, "batches", userUid);
       await expect(getMetaCounter("batches")).resolves.toEqual(1);
@@ -184,7 +184,7 @@ describe("Function tests", () => {
         sentenceIds.push(result.data.sentenceId);
       }
 
-      const result = await newBatch(sentenceIds, token);
+      const result = await createBatch(sentenceIds, token);
       await waitForCounterUpdate(0, "batches", userUid);
 
       await expect(getMetaCounter("batches")).resolves.toEqual(1);

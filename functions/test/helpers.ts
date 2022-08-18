@@ -204,7 +204,7 @@ export const addSentence = async (
   return await response.json();
 };
 
-export const newBatch = async (sentences: string[], token?: string) => {
+export const createBatch = async (sentences: string[], token?: string) => {
   const response = await fetch(`${apiUrl}/batches`, {
     method: "post",
     body: JSON.stringify({
@@ -251,6 +251,27 @@ export const editSentence = async (
 export const getPendingSentences = async (token?: string) => {
   const response = await fetch(`${apiUrl}/sentences`, {
     headers: new Headers({
+      Authorization: token ? `Bearer ${token}` : "",
+    }),
+  });
+  return await response.json();
+};
+
+export const createBatchFromBacklog = async (
+  sentences: string[],
+  markAsMined: string[],
+  pushToTheEnd: string[],
+  token?: string
+) => {
+  const response = await fetch(`${apiUrl}/batches/backlog`, {
+    method: "post",
+    body: JSON.stringify({
+      sentences,
+      markAsMined,
+      pushToTheEnd,
+    }),
+    headers: new Headers({
+      "Content-Type": "application/json",
       Authorization: token ? `Bearer ${token}` : "",
     }),
   });
