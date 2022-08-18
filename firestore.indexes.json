@@ -1,6 +1,17 @@
 {
   "indexes": [
     {
+      "collectionGroup": "sentences",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isMined", "order": "ASCENDING" },
+        { "fieldPath": "isPending", "order": "ASCENDING" },
+        { "fieldPath": "userUid", "order": "ASCENDING" },
+        { "fieldPath": "wordId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "words",
       "queryScope": "COLLECTION",
       "fields": [
