@@ -7,10 +7,11 @@ import {
   expectErrors,
   expectSuccess,
   addSentence,
-  newBatch,
+  createBatch,
   deleteSentence,
   getPendingSentences,
   editSentence,
+  createBatchFromBacklog,
 } from "./helpers";
 import * as admin from "firebase-admin";
 
@@ -36,6 +37,15 @@ describe("Api tests", () => {
     ["学校", "ガッコウ"],
     ["家", "イエ"],
     ["勝ち星", "カチボシ"],
+  ];
+  const backlogTestWords: [string, string][] = [
+    ["ペン", "ペン"],
+    ["魑魅魍魎", "チミモウリョウ"],
+    ["勝ち星", "カチボシ"],
+    ["猫", "ネコ"],
+    ["犬", "イヌ"],
+    ["学校", "ガッコウ"],
+    ["家", "イエ"],
   ];
 
   const firestore = admin.firestore();
@@ -78,6 +88,43 @@ describe("Api tests", () => {
   const mineTestWords = async (token: string): Promise<string[]> =>
     await mineWords(testWords, token);
 
+  const prepareBacklogWords = async (
+    words: [string, string][],
+    token: string
+  ): Promise<string[]> => {
+    const dummySentence = await addSentence(
+      "dummy",
+      "dummy",
+      "dummy sentence",
+      [],
+      token
+    );
+    const sentenceIds: string[] = [];
+
+    for (const [dictionaryForm, reading] of words) {
+      const result = await addSentence(
+        dictionaryForm,
+        reading,
+        `${dictionaryForm}の文`,
+        ["some", "tags"],
+        token
+      );
+
+      sentenceIds.push(result.data.sentenceId);
+    }
+
+    // Batching dummy data normally, thus making all words in backlogTestWords
+    // being marked as non-pending.
+    await createBatch([dummySentence.data.sentenceId], token);
+
+    // All the remaining sentence IDs thus have isPending and isMining both
+    // set to false.
+    return sentenceIds;
+  };
+
+  const prepareTestBacklogWords = async (token: string): Promise<string[]> =>
+    await prepareBacklogWords(backlogTestWords, token);
+
   beforeEach(async () => {
     await clean();
   });
@@ -90,7 +137,7 @@ describe("Api tests", () => {
     });
 
     test("newBatch should reject", async () => {
-      await expectErrors(newBatch(["これは猫です。"]), ["Not logged in."]);
+      await expectErrors(createBatch(["これは猫です。"]), ["Not logged in."]);
     });
 
     test("deleteSentence should reject", async () => {
@@ -105,6 +152,12 @@ describe("Api tests", () => {
 
     test("getPendingSentences should reject", async () => {
       await expectErrors(getPendingSentences(), ["Not logged in."]);
+    });
+
+    test("batchFromBacklog should reject", async () => {
+      await expectErrors(createBatchFromBacklog([], [], []), [
+        "Not logged in.",
+      ]);
     });
   });
 
@@ -348,7 +401,7 @@ describe("Api tests", () => {
         );
         expect(oldWordData?.isMined).toEqual(false);
 
-        await newBatch(sentenceIds, token);
+        await createBatch(sentenceIds, token);
 
         const newWordData = await getDocumentDataById(
           "words",
@@ -374,11 +427,11 @@ describe("Api tests", () => {
 
     describe("newBatch", () => {
       test("should validate", async () => {
-        await expectErrors(newBatch([], token));
+        await expectErrors(createBatch([], token));
       });
 
       test("should not work with non-existent sentences", async () => {
-        await expectErrors(newBatch(["wrongId"], token), [
+        await expectErrors(createBatch(["wrongId"], token), [
           "Invalid sentence IDs provided.",
         ]);
       });
@@ -387,7 +440,7 @@ describe("Api tests", () => {
         const [_user2, token2] = await initAuth();
         const [sentenceId] = await mineWords([["猫", "ネコ"]], token2);
 
-        await expectErrors(newBatch([sentenceId], token), [
+        await expectErrors(createBatch([sentenceId], token), [
           "Invalid sentence IDs provided.",
         ]);
       });
@@ -399,14 +452,14 @@ describe("Api tests", () => {
           isPending: false,
         });
 
-        await expectErrors(newBatch([sentenceId], token), [
+        await expectErrors(createBatch([sentenceId], token), [
           "Invalid sentence IDs provided.",
         ]);
       });
 
       test("should result with a batch being added", async () => {
         const sentenceIds = await mineTestWords(token);
-        const result = await newBatch(sentenceIds, token);
+        const result = await createBatch(sentenceIds, token);
 
         expect(result.data.batchId).toEqual(expect.any(String));
 
@@ -461,7 +514,7 @@ describe("Api tests", () => {
           expect(wordData?.isMined).toEqual(false);
         }
 
-        await newBatch(sentenceIdsToMine, token);
+        await createBatch(sentenceIdsToMine, token);
 
         for (const sentenceId of [
           ...sentenceIdsToMine,
@@ -486,17 +539,17 @@ describe("Api tests", () => {
         }
       });
 
-      test("newBatch should not work with the same batch being submitted twice", async () => {
+      test("should not work with the same batch being submitted twice", async () => {
         const sentenceIds = await mineTestWords(token);
-        await expectSuccess(newBatch(sentenceIds, token), {
+        await expectSuccess(createBatch(sentenceIds, token), {
           batchId: expect.any(String),
         });
-        await expectErrors(newBatch(sentenceIds, token), [
+        await expectErrors(createBatch(sentenceIds, token), [
           "Invalid sentence IDs provided.",
         ]);
       });
 
-      test("newBatch should reset the user's pendingSentences counter", async () => {
+      test("should reset the user's pendingSentences counter", async () => {
         const oldUserData = await getDocumentDataById("users", user.uid);
         expect(oldUserData?.pendingSentences).toEqual(0);
 
@@ -505,7 +558,7 @@ describe("Api tests", () => {
         const newUserData = await getDocumentDataById("users", user.uid);
         expect(newUserData?.pendingSentences).toEqual(10);
 
-        await newBatch(sentenceIds, token);
+        await createBatch(sentenceIds, token);
 
         const newestUserData = await getDocumentDataById("users", user.uid);
         expect(newestUserData?.pendingSentences).toEqual(0);
@@ -615,7 +668,7 @@ describe("Api tests", () => {
           });
         }
 
-        await newBatch(sentenceIds, token);
+        await createBatch(sentenceIds, token);
 
         const newestQuery = await getPendingSentences(token);
 
@@ -695,6 +748,324 @@ describe("Api tests", () => {
           updatedAt: timestampMatcher,
         });
         expect(newData?.updatedAt > oldData?.updatedAt).toBeTruthy();
+      });
+    });
+
+    describe("batchFromBacklog", () => {
+      test("should validate", async () => {
+        await expectErrors(createBatchFromBacklog([], [], [], token));
+      });
+
+      test("should not work with duplicate values between arrays", async () => {
+        const expectedErrors = [
+          "IDs passed in sentences, markAsMined and pushToTheEnd have to be unique between arrays.",
+        ];
+
+        await expectErrors(
+          createBatchFromBacklog(["sameId"], [], ["sameId"], token),
+          expectedErrors
+        );
+        await expectErrors(
+          createBatchFromBacklog(["sameId"], ["sameId"], [], token),
+          expectedErrors
+        );
+        await expectErrors(
+          createBatchFromBacklog(["sameId"], ["sameId"], ["sameId"], token),
+          expectedErrors
+        );
+      });
+
+      test("should not work with non-existent sentences or words", async () => {
+        const [sentenceId] = await prepareBacklogWords([["猫", "ネコ"]], token);
+
+        await expectErrors(createBatchFromBacklog(["wrongId"], [], [], token), [
+          "Invalid sentence IDs provided.",
+        ]);
+        await expectErrors(
+          createBatchFromBacklog([sentenceId], ["wrongId"], [], token),
+          ["Invalid sentence IDs in markAsMined provided."]
+        );
+        await expectErrors(
+          createBatchFromBacklog([sentenceId], [], ["wrongId"], token),
+          ["Invalid sentence IDs in pushToTheEnd provided."]
+        );
+      });
+
+      test("should not work with non-owned sentences or words", async () => {
+        const [_user2, token2] = await initAuth();
+        const [ownedSentenceId] = await prepareBacklogWords(
+          [["猫", "ネコ"]],
+          token
+        );
+        const [foreignSentenceId] = await prepareBacklogWords(
+          [["猫", "ネコ"]],
+          token2
+        );
+
+        await expectErrors(
+          createBatchFromBacklog([foreignSentenceId], [], [], token),
+          ["Invalid sentence IDs provided."]
+        );
+        await expectErrors(
+          createBatchFromBacklog(
+            [ownedSentenceId],
+            [foreignSentenceId],
+            [],
+            token
+          ),
+          ["Invalid sentence IDs in markAsMined provided."]
+        );
+        await expectErrors(
+          createBatchFromBacklog(
+            [ownedSentenceId],
+            [],
+            [foreignSentenceId],
+            token
+          ),
+          ["Invalid sentence IDs in pushToTheEnd provided."]
+        );
+      });
+
+      test("should not work with pending sentences", async () => {
+        const [sentenceId] = await mineWords([["猫", "ネコ"]], token);
+
+        await expectErrors(
+          createBatchFromBacklog([sentenceId], [], [], token),
+          ["Invalid sentence IDs provided."]
+        );
+      });
+
+      test("should result with a batch being added", async () => {
+        const nonPendingSentenceIds = await prepareTestBacklogWords(token);
+
+        const result = await createBatchFromBacklog(
+          nonPendingSentenceIds,
+          [],
+          [],
+          token
+        );
+
+        const batchData = await getDocumentDataById(
+          "batches",
+          result.data.batchId
+        );
+
+        expect(batchData).toEqual({
+          userUid: user.uid,
+          sentences: expect.arrayContaining([
+            {
+              sentenceId: expect.any(String),
+              sentence: expect.any(String),
+              wordDictionaryForm: expect.any(String),
+              wordReading: expect.any(String),
+              tags: ["some", "tags"],
+            },
+          ]),
+          createdAt: timestampMatcher,
+          updatedAt: timestampMatcher,
+        });
+      });
+
+      test("should change isMined accordingly", async () => {
+        const sentenceIdsToBatch = await prepareTestBacklogWords(token);
+        const sentenceIdsToIgnore = await prepareBacklogWords(
+          [
+            ["魚", "サカナ"],
+            ["牛乳", "ギュウニュウ"],
+          ],
+          token
+        );
+
+        for (const sentenceId of [
+          ...sentenceIdsToBatch,
+          ...sentenceIdsToIgnore,
+        ]) {
+          const sentenceData = await getDocumentDataById(
+            "sentences",
+            sentenceId
+          );
+
+          expect(sentenceData?.isMined).toEqual(false);
+          expect(sentenceData?.isPending).toEqual(false);
+
+          const wordData = await getDocumentDataById(
+            "words",
+            sentenceData?.wordId
+          );
+
+          expect(wordData?.isMined).toEqual(false);
+        }
+
+        await createBatchFromBacklog(sentenceIdsToBatch, [], [], token);
+
+        for (const sentenceId of [
+          ...sentenceIdsToBatch,
+          ...sentenceIdsToIgnore,
+        ]) {
+          const isIgnored = sentenceIdsToIgnore.includes(sentenceId);
+          const sentenceData = await getDocumentDataById(
+            "sentences",
+            sentenceId
+          );
+
+          expect(sentenceData?.isMined).toEqual(!isIgnored);
+          expect(sentenceData?.isPending).toEqual(false);
+
+          const wordData = await getDocumentDataById(
+            "words",
+            sentenceData?.wordId
+          );
+
+          expect(wordData?.isMined).toEqual(!isIgnored);
+        }
+      });
+
+      test("should not work with the same batch being submitted twice", async () => {
+        const sentenceIds = await prepareTestBacklogWords(token);
+        await expectSuccess(
+          createBatchFromBacklog(sentenceIds, [], [], token),
+          {
+            batchId: expect.any(String),
+          }
+        );
+        await expectErrors(createBatchFromBacklog(sentenceIds, [], [], token), [
+          "Invalid sentence IDs provided.",
+        ]);
+      });
+
+      test("should not reset the user's pendingSentences counter", async () => {
+        const sentenceIds = await prepareTestBacklogWords(token);
+
+        const oldUserData = await getDocumentDataById("users", user.uid);
+        expect(oldUserData?.pendingSentences).toEqual(0);
+
+        await mineTestWords(token);
+
+        const newUserData = await getDocumentDataById("users", user.uid);
+        expect(newUserData?.pendingSentences).toEqual(10);
+
+        await createBatchFromBacklog(sentenceIds, [], [], token);
+
+        const newestUserData = await getDocumentDataById("users", user.uid);
+        expect(newestUserData?.pendingSentences).toEqual(10);
+      });
+
+      test("should mark all words in markAsMined as mined", async () => {
+        const sentenceIds = await prepareTestBacklogWords(token);
+        const markAsMined = [];
+
+        for (const sentenceId of [sentenceIds[0], sentenceIds[1]]) {
+          markAsMined.push(
+            (await getDocumentDataById("sentences", sentenceId))?.wordId
+          );
+        }
+
+        const idsToIgnore = [sentenceIds[2], sentenceIds[3]];
+        const batchAsNormal = sentenceIds.slice(4);
+
+        for (const wordId of markAsMined) {
+          const wordData = await getDocumentDataById("words", wordId);
+
+          expect(wordData?.isMined).toEqual(false);
+        }
+
+        await createBatchFromBacklog(batchAsNormal, markAsMined, [], token);
+
+        for (const sentenceId of sentenceIds) {
+          const isIgnored = idsToIgnore.includes(sentenceId);
+          const sentenceData = await getDocumentDataById(
+            "sentences",
+            sentenceId
+          );
+          const wordData = await getDocumentDataById(
+            "words",
+            sentenceData?.wordId
+          );
+
+          expect(wordData?.isMined).toEqual(!isIgnored);
+        }
+      });
+
+      test("should increment buryLevel of all words in pushToTheEnd", async () => {
+        const sentenceIds = await prepareTestBacklogWords(token);
+        const pushToTheEnd = [];
+
+        for (const sentenceId of [sentenceIds[0], sentenceIds[1]]) {
+          pushToTheEnd.push(
+            (await getDocumentDataById("sentences", sentenceId))?.wordId
+          );
+        }
+
+        const firstBatch = [sentenceIds[2], sentenceIds[3]];
+        const secondBatch = sentenceIds.slice(4);
+
+        for (const wordId of pushToTheEnd) {
+          const wordData = await getDocumentDataById("words", wordId);
+
+          expect(wordData?.buryLevel ?? 0).toEqual(0);
+        }
+
+        await createBatchFromBacklog(firstBatch, [], pushToTheEnd, token);
+
+        for (const wordId of pushToTheEnd) {
+          const wordData = await getDocumentDataById("words", wordId);
+
+          expect(wordData?.buryLevel ?? 0).toEqual(1);
+        }
+
+        await createBatchFromBacklog(secondBatch, [], pushToTheEnd, token);
+
+        for (const wordId of pushToTheEnd) {
+          const wordData = await getDocumentDataById("words", wordId);
+
+          expect(wordData?.buryLevel ?? 0).toEqual(2);
+        }
+      });
+
+      test("should mark all words in markAsMined as mined and increment buryLevel of all words in pushToTheEnd", async () => {
+        const sentenceIds = await prepareTestBacklogWords(token);
+        const markAsMined = [];
+        const pushToTheEnd = [];
+
+        for (const sentenceId of [sentenceIds[0], sentenceIds[1]]) {
+          markAsMined.push(
+            (await getDocumentDataById("sentences", sentenceId))?.wordId
+          );
+        }
+
+        for (const sentenceId of [sentenceIds[2], sentenceIds[3]]) {
+          pushToTheEnd.push(
+            (await getDocumentDataById("sentences", sentenceId))?.wordId
+          );
+        }
+
+        const batch = sentenceIds.slice(4);
+
+        for (const wordId of markAsMined) {
+          const wordData = await getDocumentDataById("words", wordId);
+
+          expect(wordData?.isMined).toEqual(false);
+        }
+
+        for (const wordId of pushToTheEnd) {
+          const wordData = await getDocumentDataById("words", wordId);
+
+          expect(wordData?.buryLevel ?? 0).toEqual(0);
+        }
+
+        await createBatchFromBacklog(batch, markAsMined, pushToTheEnd, token);
+
+        for (const wordId of markAsMined) {
+          const wordData = await getDocumentDataById("words", wordId);
+
+          expect(wordData?.isMined).toEqual(true);
+        }
+
+        for (const wordId of pushToTheEnd) {
+          const wordData = await getDocumentDataById("words", wordId);
+
+          expect(wordData?.buryLevel ?? 0).toEqual(1);
+        }
       });
     });
   });
