@@ -426,6 +426,50 @@ describe("Api tests", () => {
         );
         expect(newestWordData?.isMined).toEqual(false);
       });
+
+      test("should set buryLevel to 0 after the word has been mined again", async () => {
+        const sentenceIds = await prepareTestBacklogWords(token);
+        const sentenceData = await getDocumentDataById(
+          "sentences",
+          sentenceIds[1]
+        );
+
+        const oldWordData = await getDocumentDataById(
+          "words",
+          sentenceData?.wordId
+        );
+        expect(oldWordData?.isMined).toEqual(false);
+        expect(oldWordData?.buryLevel).toEqual(0);
+
+        await createBatchFromBacklog(
+          [sentenceIds[0]],
+          [],
+          [sentenceData?.wordId],
+          token
+        );
+
+        const newWordData = await getDocumentDataById(
+          "words",
+          sentenceData?.wordId
+        );
+        expect(newWordData?.isMined).toEqual(false);
+        expect(newWordData?.buryLevel).toEqual(1);
+
+        await addSentence(
+          newWordData?.dictionaryForm,
+          newWordData?.reading,
+          `${newWordData?.dictionaryForm}の文`,
+          [],
+          token
+        );
+
+        const newestWordData = await getDocumentDataById(
+          "words",
+          sentenceData?.wordId
+        );
+        expect(newestWordData?.isMined).toEqual(false);
+        expect(newestWordData?.buryLevel).toEqual(0);
+      });
     });
 
     describe("newBatch", () => {

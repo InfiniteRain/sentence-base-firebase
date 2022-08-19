@@ -93,6 +93,7 @@ export const addSentence = async (
       ? transaction.update(wordRef, {
           frequency: fieldValueIncrement(1),
           isMined: false,
+          buryLevel: 0,
           updatedAt: currentTimestamp,
         })
       : transaction.create(wordRef, {
